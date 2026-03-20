@@ -1,4 +1,4 @@
-# Data Model: Sites com campos nomeados
+# Data Model: Sites with named fields
 
 **Storage**: `chrome.storage.local`  
 **Top-level key**: `monitoredEntries` (array)
@@ -7,47 +7,47 @@
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | `string` (UUID v4) | yes | Identificador estável da entrada. |
-| `pageUrl` | `string` (URL absoluto) | yes | URL da página monitorizada. |
-| `title` | `string` | yes | Título mostrado no cartão do site. |
-| `faviconUrl` | `string` (URL) | no | URL do favicon do site. |
-| `order` | `number` (integer ≥ 0) | yes | Ordem de exibição na lista. |
-| `fields` | `MonitoredField[]` | yes | Lista de valores monitorizados desse site. |
-| `updatedAt` | `string` (ISO-8601) | no | Momento da última leitura bem-sucedida. |
+| `id` | `string` (UUID v4) | yes | Stable entry identifier. |
+| `pageUrl` | `string` (absolute URL) | yes | Monitored page URL. |
+| `title` | `string` | yes | Title shown on the site card. |
+| `faviconUrl` | `string` (URL) | no | Site favicon URL. |
+| `order` | `number` (integer ≥ 0) | yes | Display order in the list. |
+| `fields` | `MonitoredField[]` | yes | List of monitored values for that site. |
+| `updatedAt` | `string` (ISO-8601) | no | Timestamp of last successful read. |
 
 ## Entity: `MonitoredField`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | `string` | yes | Identificador estável do campo dentro do site. |
-| `label` | `string` | yes | Nome dado pelo utilizador ao valor monitorizado. |
-| `selector` | `string` | yes | CSS selector do elemento alvo na página. |
-| `valueText` | `string` | no | Valor textual extraído do elemento na última leitura. |
+| `id` | `string` | yes | Stable field id within the site. |
+| `label` | `string` | yes | User-given name for the monitored value. |
+| `selector` | `string` | yes | CSS selector of the target element on the page. |
+| `valueText` | `string` | no | Text extracted from the element on last read. |
 
 ## Validation rules
 
-- `pageUrl`: `new URL(pageUrl)` deve ser válido; rejeitar `chrome://`, `chrome-extension://`.
-- `title`: não vazio após trim; máx. 200 caracteres.
-- `fields`: pelo menos 1 campo por entrada.
-- `fields[].label`: não vazio após trim; máx. 120 caracteres.
-- `fields[].selector`: não vazio; máx. 4096 caracteres.
-- `fields[].valueText`: truncar para não explodir o `storage.local`.
+- `pageUrl`: `new URL(pageUrl)` must be valid; reject `chrome://`, `chrome-extension://`.
+- `title`: non-empty after trim; max 200 characters.
+- `fields`: at least 1 field per entry.
+- `fields[].label`: non-empty after trim; max 120 characters.
+- `fields[].selector`: non-empty; max 4096 characters.
+- `fields[].valueText`: truncate so `storage.local` does not blow up.
 
 ## Relationships
 
-- Lista plana de sites, cada um com vários campos nomeados.
-- Múltiplas entradas podem partilhar o mesmo `pageUrl`.
+- Flat list of sites, each with multiple named fields.
+- Multiple entries may share the same `pageUrl`.
 
 ## State transitions
 
-1. **Criação**: fluxo `+` → URL → picker abre → o utilizador seleciona vários campos e dá nome a cada um → guarda a entrada.
-2. **Reordenação**: atualizar `order` em todos os itens afetados.
-3. **Refresh**: atualizar apenas `fields[].valueText` e `updatedAt`.
-4. **Edição de título**: atualizar `title` apenas.
-5. **Remoção**: filtrar por `id`; reindexar `order`.
-6. **Reconfigurar campos**: mesmo `id`, substituir `fields`.
+1. **Create**: `+` flow → URL → picker opens → user selects multiple fields and names each → save entry.
+2. **Reorder**: update `order` on all affected items.
+3. **Refresh**: update only `fields[].valueText` and `updatedAt`.
+4. **Edit title**: update `title` only.
+5. **Remove**: filter by `id`; reindex `order`.
+6. **Reconfigure fields**: same `id`, replace `fields`.
 
 ## Scale assumptions
 
-- Até **10–20** entradas, com vários campos por entrada.
-- `fields[].valueText` deve ser curto o bastante para manter o `storage.local` confortável.
+- Up to **10–20** entries, with several fields per entry.
+- `fields[].valueText` should stay short enough to keep `storage.local` comfortable.

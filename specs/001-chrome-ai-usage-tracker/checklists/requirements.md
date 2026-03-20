@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Painel unificado de uso de IA (Chrome)
+# Specification Quality Checklist: Unified AI usage panel (Chrome)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-03-19  
@@ -31,6 +31,6 @@
 
 ## Notes
 
-- **Scope note**: Reference explícita a “Google Chrome” e “extensão” reflecte o pedido do utilizador como forma do produto, não stack de implementação.
-- **SC-002**: Cobre persistência entre sessões com métrica verificável, formulada em termos de navegador (canal do produto).
-- Checklist validado contra `spec.md` na mesma data; pronto para `/speckit.plan` ou `/speckit.clarify` se surgirem novos requisitos.
+- **Scope note**: Explicit reference to “Google Chrome” and “extension” reflects the user’s request as the product shape, not implementation stack.
+- **SC-002**: Covers session persistence with a verifiable metric, phrased in browser terms (product channel).
+- Checklist validated against `spec.md` on the same date; ready for `/speckit.plan` or `/speckit.clarify` if new requirements appear.

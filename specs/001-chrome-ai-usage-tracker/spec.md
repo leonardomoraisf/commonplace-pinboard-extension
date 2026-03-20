@@ -1,134 +1,134 @@
-# Feature Specification: Painel unificado de uso de IA (extensão Chrome)
+# Feature Specification: Unified AI usage panel (Chrome extension)
 
 **Feature Branch**: `001-chrome-ai-usage-tracker`  
 **Created**: 2026-03-19  
 **Status**: Draft  
-**Input**: User description: "Quero criar uma extensão para usar no google chrome que irá servir para eu acompanhar o uso das minhas ferramentas de IA em um só lugar. Ideia: já logado nas plataformas Cursor e Codex. Páginas iniciais desejadas: uso Codex (ChatGPT) e gastos Cursor. Fluxo + para URL, seleção de secção, lista com scroll, persistência, título/favicon configuráveis."
+**Input**: User description: "I want to create an extension for Google Chrome to track my AI tool usage in one place. Idea: already logged into Cursor and Codex. Desired starter pages: Codex usage (ChatGPT) and Cursor spending. Flow: + for URL, section selection, scrollable list, persistence, configurable title/favicon."
 
 ## Clarifications
 
 ### Session 2026-03-19
 
-- Q: Quando e como o conteúdo das amostras deve atualizar relativamente à página de origem? → A: Ao abrir o painel e/ou mediante ação explícita de atualização por entrada; sem atualização automática contínua em segundo plano (opção A).
-- Q: Onde o utilizador abre e usa o painel unificado no Chrome? → A: Popup ao clicar no ícone da extensão (opção A).
-- Q: Como deve funcionar o acesso da extensão aos sites adicionados (permissões)? → A: Uso exclusivamente pessoal pelo autor; sem preocupação com minimização de permissões nem posture de segurança formal — é aceitável o âmbito de permissões mais simples/largo que a implementação exija (equivalente prático à opção B).
-- Q: Como deve ser determinada a ordem das entradas na lista? → A: Reordenação manual pelo utilizador, com ordem persistida (opção C).
-- Q: Deve existir forma explícita de abrir a página completa a partir de cada entrada? → A: Sim — controlo dedicado e claro para abrir o URL num novo separador, sem depender de clicar na amostra (opção A).
+- Q: When and how should sample content update relative to the source page? → A: When opening the panel and/or via an explicit refresh action per entry; no continuous automatic background refresh (option A).
+- Q: Where does the user open and use the unified panel in Chrome? → A: Popup when clicking the extension icon (option A).
+- Q: How should the extension access added sites (permissions)? → A: Personal use only by the author; no requirement to minimize permissions or formal security posture — the broadest/simplest permission scope the implementation needs is acceptable (practical equivalent to option B).
+- Q: How should entry order in the list be determined? → A: Manual reordering by the user, with order persisted (option C).
+- Q: Should there be an explicit way to open the full page from each entry? → A: Yes — a dedicated, clear control to open the URL in a new tab, without relying on clicking the sample (option A).
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Adicionar uma nova página monitorizada (Priority: P1)
+### User Story 1 - Add a new monitored page (Priority: P1)
 
-O utilizador quer registar uma página web (por exemplo, área de uso ou gastos de uma ferramenta de IA) e escolher qual parte dessa página deve aparecer sempre no painel unificado. Clica no controlo “+” no topo, introduz o endereço da página, confirma, e escolhe visualmente a secção da página cujo conteúdo quer manter visível na lista. A nova entrada passa a aparecer na lista com uma amostra dessa secção.
+The user wants to register a web page (for example, an AI tool’s usage or spending area) and choose which part of that page should always appear in the unified panel. They tap the “+” control at the top, enter the page address, confirm, and visually pick the page section whose content they want to keep visible in the list. The new entry appears in the list with a sample of that section.
 
-**Why this priority**: Sem este fluxo não há produto — é o núcleo para concentrar o acompanhamento num só lugar.
+**Why this priority**: Without this flow there is no product — it is the core for consolidating tracking in one place.
 
-**Independent Test**: Pode testar-se de ponta a ponta com um único URL: após o fluxo, a entrada existe na lista e mostra a área escolhida.
+**Independent Test**: Can be tested end-to-end with a single URL: after the flow, the entry exists in the list and shows the chosen area.
 
 **Acceptance Scenarios**:
 
-1. **Given** o painel da extensão aberto sem entradas (ou com entradas existentes), **When** o utilizador toca em “+”, introduz um URL válido e completa a seleção de secção, **Then** surge uma nova linha na lista com pré-visualização da secção escolhida.
-2. **Given** uma entrada criada, **When** o utilizador fecha e volta a abrir o browser (ou a extensão) noutro momento, **Then** a mesma entrada e a mesma secção escolhida continuam disponíveis sem repetir o fluxo.
+1. **Given** the extension panel open with no entries (or with existing entries), **When** the user taps “+”, enters a valid URL, and completes section selection, **Then** a new row appears in the list with a preview of the chosen section.
+2. **Given** a created entry, **When** the user closes and later reopens the browser (or the extension), **Then** the same entry and chosen section remain available without repeating the flow.
 
 ---
 
-### User Story 2 - Ver todas as áreas numa lista simples com scroll (Priority: P2)
+### User Story 2 - See all areas in a simple scrollable list (Priority: P2)
 
-O utilizador quer percorrer, na janela do popup da extensão, as várias áreas que configurou (uso Codex, gastos Cursor, futuras páginas), cada uma como amostra da secção escolhida, numa lista vertical simples. Pode **reordenar** as entradas manualmente para definir a sequência preferida; essa ordem fica guardada. Quando há muitas entradas, a lista permite scroll para ver todas dentro do espaço disponível do popup.
+The user wants to browse, in the extension popup window, the various areas they configured (Codex usage, Cursor spending, future pages), each as a sample of the chosen section, in a simple vertical list. They can **reorder** entries manually to set their preferred sequence; that order is saved. When there are many entries, the list allows scrolling to see everything within the popup’s available space.
 
-**Why this priority**: Entrega o valor de “um só lugar” para comparar e rever várias fontes sem saltar entre separadores manualmente.
+**Why this priority**: Delivers the “one place” value to compare and review several sources without manually jumping between tabs.
 
-**Independent Test**: Com pelo menos duas entradas guardadas, verificar que ambas aparecem na lista e que é possível fazer scroll até à última.
+**Independent Test**: With at least two saved entries, verify both appear in the list and that scrolling reaches the last one.
 
 **Acceptance Scenarios**:
 
-1. **Given** várias entradas guardadas, **When** o utilizador abre o painel, **Then** vê cada entrada como bloco/list item com a amostra da respetiva secção.
-2. **Given** mais entradas do que cabem no ecrã visível, **When** o utilizador faz scroll na lista, **Then** consegue alcançar todas as entradas sem sair do painel.
-3. **Given** o painel estava fechado e os dados na página de origem mudaram, **When** o utilizador volta a abrir o painel, **Then** as amostras refletem uma nova leitura desse momento (sem depender de atualização automática contínua enquanto o painel esteve aberto).
-4. **Given** o painel já está aberto e uma entrada mostra dados antigos, **When** o utilizador pede atualização explícita nessa entrada, **Then** só essa amostra é renovada segundo o estado atual da página alvo.
-5. **Given** pelo menos duas entradas na lista, **When** o utilizador reordena manualmente os itens (por exemplo, arrastando ou com ações de subir/descer), **Then** a lista reflete imediatamente a nova ordem.
-6. **Given** uma ordem personalizada, **When** o utilizador fecha o navegador e mais tarde reabre o painel, **Then** as entradas aparecem na mesma ordem guardada.
-7. **Given** uma entrada com URL guardado, **When** o utilizador usa o **controlo dedicado** para abrir a página completa, **Then** o URL correto abre num **novo separador** sem que a interação dependa de clicar na amostra.
+1. **Given** several saved entries, **When** the user opens the panel, **Then** they see each entry as a block/list item with the sample for that section.
+2. **Given** more entries than fit on the visible screen, **When** the user scrolls the list, **Then** they can reach all entries without leaving the panel.
+3. **Given** the panel was closed and data on the source page changed, **When** the user opens the panel again, **Then** the samples reflect a new read at that moment (without relying on continuous automatic refresh while the panel was open).
+4. **Given** the panel is already open and an entry shows stale data, **When** the user requests an explicit refresh on that entry, **Then** only that sample is renewed to match the current state of the target page.
+5. **Given** at least two entries in the list, **When** the user manually reorders items (e.g. by dragging or move-up/move-down actions), **Then** the list immediately reflects the new order.
+6. **Given** a custom order, **When** the user closes the browser and later reopens the panel, **Then** entries appear in the same saved order.
+7. **Given** an entry with a saved URL, **When** the user uses the **dedicated control** to open the full page, **Then** the correct URL opens in a **new tab** without the interaction depending on clicking the sample.
 
 ---
 
-### User Story 3 - Título e ícone identificáveis e editáveis (Priority: P3)
+### User Story 3 - Identifiable and editable title and icon (Priority: P3)
 
-Para cada entrada, o utilizador pode aceitar o título da página e o ícone (favicon) sugeridos automaticamente, ou definir um título próprio à criação. Mais tarde, pode manter o favicon visível e alterar só o título, para organizar o painel ao seu gosto.
+For each entry, the user can accept the page title and favicon suggested automatically, or set their own title at creation. Later, they can keep the favicon visible and change only the title to organize the panel as they prefer.
 
-**Why this priority**: Melhora reconhecimento rápido e organização quando há muitas ferramentas semelhantes.
+**Why this priority**: Improves quick recognition and organization when many similar tools are present.
 
-**Independent Test**: Criar entrada com título automático; editar título; confirmar que o favicon continua visível conforme esperado.
+**Independent Test**: Create an entry with automatic title; edit the title; confirm the favicon remains visible as expected.
 
 **Acceptance Scenarios**:
 
-1. **Given** o fluxo de adição de página, **When** o utilizador não define título manual, **Then** o sistema usa o título da página e mostra o favicon associado à entrada.
-2. **Given** o fluxo de adição de página, **When** o utilizador define um título personalizado, **Then** esse título aparece na lista e o favicon pode continuar a ser mostrado.
-3. **Given** uma entrada existente, **When** o utilizador altera apenas o título, **Then** o favicon e a secção monitorizada mantêm-se; só o texto de identificação muda.
+1. **Given** the add-page flow, **When** the user does not set a manual title, **Then** the system uses the page title and shows the favicon associated with the entry.
+2. **Given** the add-page flow, **When** the user sets a custom title, **Then** that title appears in the list and the favicon may still be shown.
+3. **Given** an existing entry, **When** the user changes only the title, **Then** the favicon and monitored section are unchanged; only the identifying text changes.
 
 ---
 
-### User Story 4 - Extensão fácil a novas páginas (Priority: P2)
+### User Story 4 - Extension easy to extend to new pages (Priority: P2)
 
-O utilizador quer que adicionar novas páginas de controlo (além das que já usa hoje) siga sempre o mesmo fluxo “+ → URL → escolher secção”, sem depender de atualizações manuais à lista de sites.
+The user wants adding new monitoring pages (beyond those used today) to always follow the same “+ → URL → choose section” flow, without depending on manual updates to a fixed site list.
 
-**Why this priority**: Garante que o produto acompanha novas ferramentas ou novas URLs de relatórios sem retrabalho de configuração “fixa”.
+**Why this priority**: Ensures the product can follow new tools or new report URLs without rework of “fixed” configuration.
 
-**Independent Test**: Adicionar um URL diferente dos exemplos iniciais e repetir o fluxo com sucesso.
+**Independent Test**: Add a URL different from the initial examples and repeat the flow successfully.
 
 **Acceptance Scenarios**:
 
-1. **Given** o utilizador descobre uma nova página de estatísticas ou uso, **When** usa o mesmo fluxo de adição, **Then** consegue incluí-la na lista tal como as entradas existentes.
+1. **Given** the user discovers a new statistics or usage page, **When** they use the same add flow, **Then** they can include it in the list like existing entries.
 
 ---
 
 ### Edge Cases
 
-- URL inválido, página em erro ou temporariamente indisponível: o utilizador recebe feedback claro e pode corrigir ou cancelar sem perder entradas já guardadas.
-- Utilizador não está autenticado no site alvo: a pré-visualização reflete o que o site mostra nesse estado (por exemplo, ecrã de login); não se assume login automático pela extensão.
-- Secção escolhida muito extensa: a lista deve continuar utilizável (por exemplo, limitando a altura da amostra com scroll interno ou truncagem visível, sem quebrar o scroll global da lista).
-- Janela popup com dimensões limitadas pelo Chrome: o layout MUST manter lista e amostras utilizáveis exclusivamente com scroll interno (vertical global da lista e, se necessário, por entrada), sem exigir redimensionamento manual pelo utilizador para concluir tarefas principais.
-- O mesmo URL adicionado mais de uma vez com secções diferentes: cada entrada é independente (identificador lógico distinto); a reordenação afeta cada item da lista, não confunde entradas distintas.
-- Conteúdo da página muda no servidor: a amostra atualiza quando o utilizador abre (ou reabre) o painel principal ou quando dispara atualização explícita nessa entrada; não há atualização periódica automática em segundo plano; se a estrutura da página mudar de forma incompatível com a secção guardada, o utilizador pode precisar de reconfigurar essa entrada.
-- Abrir o site original: o utilizador usa sempre o controlo dedicado (**FR-014**); se a amostra for interativa ou clicável por outro motivo, não deve substituir nem obscurecer essa ação intencional de “abrir página completa”.
+- Invalid URL, error page, or temporarily unavailable site: the user gets clear feedback and can correct or cancel without losing already saved entries.
+- User is not authenticated on the target site: the preview reflects what the site shows in that state (e.g. login screen); automatic login by the extension is not assumed.
+- Chosen section is very large: the list must remain usable (e.g. by limiting sample height with internal scroll or visible truncation, without breaking global list scroll).
+- Popup window dimensions limited by Chrome: the layout MUST keep the list and samples usable using internal scroll only (global vertical list scroll and, if needed, per-entry scroll), without requiring manual resizing by the user to complete main tasks.
+- Same URL added more than once with different sections: each entry is independent (distinct logical id); reordering affects each list item without conflating distinct entries.
+- Page content changes on the server: the sample updates when the user opens (or reopens) the main panel or triggers an explicit refresh on that entry; there is no periodic automatic background refresh; if page structure changes incompatibly with the saved section, the user may need to reconfigure that entry.
+- Opening the original site: the user always uses the dedicated control (**FR-014**); if the sample is interactive or clickable for other reasons, it must not replace or obscure that intentional “open full page” action.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: A extensão MUST apresentar um painel principal com uma lista vertical das áreas monitorizadas, aberto como **popup** ao clicar no ícone da extensão na barra de ferramentas do Chrome.
-- **FR-002**: Cada item da lista MUST mostrar uma amostra visual da secção da página que o utilizador selecionou para essa entrada.
-- **FR-003**: O painel MUST incluir um controlo “+” no topo que inicia o fluxo de adição de uma nova página.
-- **FR-004**: No fluxo de adição, o utilizador MUST poder introduzir o URL da página e, em seguida, selecionar qual secção da página fica associada à entrada.
-- **FR-005**: Todas as entradas (URL, secção escolhida, título, preferências de apresentação do ícone, **ordem na lista**) MUST persistir entre sessões do browser até o utilizador as remover ou alterar.
-- **FR-006**: Para cada entrada, o utilizador MUST poder usar um título personalizado na criação OU aceitar o título derivado da página juntamente com o favicon exibido na lista.
-- **FR-007**: Para cada entrada existente, o utilizador MUST poder alterar o título enquanto mantém o favicon (e a secção) salvo, salvo ação explícita em contrário.
-- **FR-008**: Quando a lista exceder o espaço visível, o utilizador MUST poder fazer scroll para ver todos os itens.
-- **FR-009**: O fluxo de adição MUST ser genérico: qualquer URL permitida pelo utilizador MUST poder ser adicionada pelo mesmo processo, sem lista fixa exclusiva de domínios (podendo existir exemplos ou atalhos informativos para as páginas que o utilizador já valoriza hoje: uso Codex no ChatGPT e gastos no dashboard Cursor).
-- **FR-010**: O utilizador MUST poder remover ou reconfigurar uma entrada (por exemplo, voltar a escolher secção ou URL) sem apagar as restantes.
-- **FR-011**: As amostras MUST obter conteúdo atualizado da página alvo quando o utilizador abre ou reabre o painel principal; o utilizador MUST poder pedir atualização explícita por entrada; o sistema MUST NOT realizar atualização automática contínua ou por intervalo fixo em segundo plano enquanto o painel permanece aberto.
-- **FR-012**: Dado uso **exclusivamente pessoal** pelo autor, o modelo de permissões do Chrome MAY ser o de **maior âmbito necessário** à implementação (por exemplo, acesso amplo a URLs HTTPS), **sem** obrigatoriedade de consentimento incremental por domínio ao adicionar cada URL nem de documentação de ameaças para terceiros.
-- **FR-013**: O utilizador MUST poder **reordenar manualmente** as entradas na lista; a ordem resultante MUST persistir juntamente com os restantes dados da entrada (alinhado com **FR-005**).
-- **FR-014**: Cada entrada MUST expor uma forma **clara e dedicada** (por exemplo, ícone ou ligação no cabeçalho da entrada) de abrir o **URL completo** guardado num **novo separador**; abrir o site MUST NOT depender exclusivamente de clicar na área da amostra.
+- **FR-001**: The extension MUST show a main panel with a vertical list of monitored areas, opened as a **popup** when clicking the extension icon in the Chrome toolbar.
+- **FR-002**: Each list item MUST show a visual sample of the page section the user selected for that entry.
+- **FR-003**: The panel MUST include a “+” control at the top that starts the flow to add a new page.
+- **FR-004**: In the add flow, the user MUST be able to enter the page URL and then select which section of the page is associated with the entry.
+- **FR-005**: All entries (URL, chosen section, title, icon display preferences, **list order**) MUST persist across browser sessions until the user removes or changes them.
+- **FR-006**: For each entry, the user MUST be able to use a custom title at creation OR accept the title derived from the page together with the favicon shown in the list.
+- **FR-007**: For each existing entry, the user MUST be able to change the title while keeping the favicon (and section) saved, unless they explicitly act otherwise.
+- **FR-008**: When the list exceeds visible space, the user MUST be able to scroll to see all items.
+- **FR-009**: The add flow MUST be generic: any URL the user allows MUST be addable through the same process, without an exclusive fixed domain list (informational examples or shortcuts may exist for pages the user values today: Codex usage on ChatGPT and spending on the Cursor dashboard).
+- **FR-010**: The user MUST be able to remove or reconfigure an entry (e.g. re-pick section or URL) without deleting the others.
+- **FR-011**: Samples MUST get updated content from the target page when the user opens or reopens the main panel; the user MUST be able to request an explicit refresh per entry; the system MUST NOT perform continuous automatic refresh or fixed-interval background refresh while the panel stays open.
+- **FR-012**: Given **personal-only** use by the author, the Chrome permission model MAY be the **broadest scope required** by the implementation (e.g. broad HTTPS URL access), **without** mandatory incremental consent per domain when adding each URL or threat documentation for third parties.
+- **FR-013**: The user MUST be able to **manually reorder** entries in the list; the resulting order MUST persist together with the rest of the entry data (aligned with **FR-005**).
+- **FR-014**: Each entry MUST expose a **clear, dedicated** way (e.g. icon or link in the entry header) to open the saved **full URL** in a **new tab**; opening the site MUST NOT depend solely on clicking the sample area.
 
 ### Key Entities
 
-- **Entrada monitorizada**: Representa uma fonte no painel. Atributos: endereço da página; referência à secção escolhida (de forma que a amostra possa ser reproduzida); título apresentado; favicon associado; **posição ordenável** na lista (definida pelo utilizador e persistida); metadados de criação/última atualização se úteis ao utilizador.
+- **Monitored entry**: Represents a source in the panel. Attributes: page address; reference to the chosen section (so the sample can be reproduced); displayed title; associated favicon; **sortable position** in the list (user-defined and persisted); creation / last-updated metadata if useful to the user.
 
 ### Assumptions
 
-- O utilizador gere a própria autenticação em cada site (Cursor, Codex/ChatGPT, outros); a extensão não substitui login nem armazena credenciais desses serviços.
-- Os exemplos de páginas que o utilizador quer ver hoje são apenas referência de valor; o comportamento é o mesmo para qualquer nova página adicionada pelo fluxo “+”.
-- O armazenamento das configurações é local ao dispositivo do utilizador, adequado a dados de organização pessoal.
-- O produto destina-se ao navegador Google Chrome, como canal de distribuição pedido pelo utilizador.
-- **Uso pessoal**: Ferramenta para um único utilizador (autor); não há requisito de minimização de permissões, endurecimento para partilha de máquina, nem conformidade explícita com requisitos de publicação na Chrome Web Store além do necessário para instalação local.
+- The user manages their own authentication on each site (Cursor, Codex/ChatGPT, others); the extension does not replace login or store credentials for those services.
+- Example pages the user wants to see today are only value references; behavior is the same for any new page added via the “+” flow.
+- Configuration storage is local to the user’s device, appropriate for personal organization data.
+- The product targets Google Chrome as the distribution channel requested by the user.
+- **Personal use**: Tool for a single user (author); no requirement to minimize permissions, harden for shared machines, or meet explicit Chrome Web Store publication requirements beyond what local installation needs.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Um utilizador consegue adicionar uma nova entrada (URL + seleção de secção) e vê-la na lista em menos de 2 minutos na primeira utilização, sem documentação externa.
-- **SC-002**: Após fechar completamente o navegador e reabrir, 100% das entradas configuradas reaparecem com a mesma secção, títulos/favicons e **ordem na lista** guardados, num teste com até 10 entradas.
-- **SC-003**: Com 5 ou mais entradas, o utilizador consegue localizar qualquer uma fazendo scroll na lista em menos de 15 segundos.
-- **SC-004**: Pelo menos 90% dos participantes num teste de usabilidade informal identificam corretamente qual ferramenta corresponde a cada entrada graças a título e ícone, sem abrir o site original.
-- **SC-005**: O utilizador classifica como “fácil” ou equivalente a adição de uma nova página genérica (escala simples ou entrevista curta), alinhado com o objetivo de extensibilidade.
+- **SC-001**: A user can add a new entry (URL + section selection) and see it in the list in under 2 minutes on first use, without external documentation.
+- **SC-002**: After fully closing the browser and reopening, 100% of configured entries reappear with the same section, titles/favicons, and **list order** saved, in a test with up to 10 entries.
+- **SC-003**: With 5 or more entries, the user can locate any one by scrolling the list in under 15 seconds.
+- **SC-004**: At least 90% of participants in an informal usability test correctly identify which tool each entry corresponds to thanks to title and icon, without opening the original site.
+- **SC-005**: The user rates adding a generic new page as “easy” or equivalent (simple scale or short interview), aligned with the extensibility goal.

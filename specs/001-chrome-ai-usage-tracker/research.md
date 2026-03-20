@@ -1,66 +1,66 @@
-# Research: Painel unificado de uso de IA (Chrome)
+# Research: Unified AI usage panel (Chrome)
 
 **Feature**: `001-chrome-ai-usage-tracker`  
 **Date**: 2026-03-19
 
-## R1 — Pré-visualização de páginas que bloqueiam iframe (Cursor, ChatGPT, etc.)
+## R1 — Preview of pages that block iframe (Cursor, ChatGPT, etc.)
 
-**Decision**: Não depender de `<iframe src="…">` no popup para a amostra. Usar **extração de DOM** na página real (separador com sessão autenticada) e **reproduzir** no popup como HTML sanitizado dentro de um contentor com altura máxima e scroll interno.
+**Decision**: Do not rely on `<iframe src="…">` in the popup for the sample. Use **DOM extraction** on the real page (tab with authenticated session) and **reproduce** in the popup as sanitized HTML inside a container with max height and internal scroll.
 
-**Rationale**: `X-Frame-Options` e `frame-ancestors` em CSP impedem incorporar dashboards sensíveis no popup. A spec exige amostra visual e refresh com credenciais do perfil — isso exige executar código no contexto da página (content script) ou num separador que carrega o URL com as mesmas cookies.
+**Rationale**: `X-Frame-Options` and `frame-ancestors` in CSP prevent embedding sensitive dashboards in the popup. The spec requires a visual sample and refresh with profile credentials — that requires running code in the page context (content script) or in a tab that loads the URL with the same cookies.
 
 **Alternatives considered**:
 
-- **Iframe no popup** — rejeitado: falha nos alvos principais.
-- **Screenshot (`captureVisibleTab`)** — rejeitado como única solução: só funciona para o separador visível; não escala para N entradas sem UX frágil.
-- **Offscreen documents** — possível mais tarde; mais complexo para MVP “HTML/CSS/JS simples”. Adiar.
+- **Iframe in popup** — rejected: fails for main targets.
+- **Screenshot (`captureVisibleTab`)** — rejected as sole solution: only works for the visible tab; does not scale to N entries without fragile UX.
+- **Offscreen documents** — possible later; more complex for MVP “simple HTML/CSS/JS”. Defer.
 
-## R2 — Política de atualização ao abrir o popup e por entrada (FR-011)
+## R2 — Refresh policy when opening the popup and per entry (FR-011)
 
 **Decision**:
 
-1. **Ao abrir o popup**: para cada entrada, tentar **atualizar** nesta ordem: (a) se existir separador cuja URL é **mesma origem** que a entrada e o path é compatível (prefixo ou match normalizado), injetar script e ler o nó pelo seletor guardado; (b) caso contrário, mostrar **cache** da última extração bem-sucedida com indicador opcional de idade (“última atualização”).
-2. **Atualização explícita por entrada**: o service worker abre um separador **inativo** (`active: false`) com o URL guardado, espera `complete`, injeta o extrator, grava HTML/texto em cache, fecha o separador se foi criado para este efeito (ou deixa aberto conforme preferência de implementação mínima: fechar para não poluir).
+1. **When opening the popup**: for each entry, try to **update** in this order: (a) if a tab exists whose URL is **same origin** as the entry and path is compatible (prefix or normalized match), inject script and read the node by stored selector; (b) otherwise show **cache** from the last successful extraction with optional age indicator (“last updated”).
+2. **Explicit refresh per entry**: the service worker opens an **inactive** tab (`active: false`) with the saved URL, waits for `complete`, injects the extractor, writes HTML/text to cache, closes the tab if it was created for this purpose (or leaves it open per minimal implementation preference: close to avoid clutter).
 
-**Rationale**: Cumpre “nova leitura ao reabrir” sem polling. Evita abrir N separadores em paralelo no primeiro passo (usa separadores já abertos). O refresh manual cobre o caso “não tenho o site aberto”.
-
-**Alternatives considered**:
-
-- **Sempre abrir separador oculto por entrada ao abrir popup** — simples mas lento e intrusivo; usar só no botão de refresh.
-- **Apenas cache sem tentativa de tab matching** — não cumpre FR-011 ao abrir.
-
-## R3 — Representação da “secção escolhida”
-
-**Decision**: Guardar um **CSS selector** estável gerado no momento da seleção (caminho com `nth-of-type` / similar até ao elemento clicado) e, na primeira gravação, persistir também **snapshot inicial** (`innerHTML` sanitizado: remover `<script>`, `on*` attributes, `javascript:` URLs) para mostrar imediatamente no popup mesmo antes do primeiro refresh.
-
-**Rationale**: Balanceia simplicidade e capacidade de re-leitura. Seletores quebram quando o DOM muda — já coberto na spec (reconfigurar entrada).
+**Rationale**: Satisfies “new read on reopen” without polling. Avoids opening N hidden tabs on first pass (uses already open tabs). Manual refresh covers “I don’t have the site open”.
 
 **Alternatives considered**:
 
-- **XPath apenas** — equivalente; CSS selector é familiar para debug.
-- **Só coordenadas de crop** — frágil com responsive layout.
+- **Always open hidden tab per entry when opening popup** — simple but slow and intrusive; use only on refresh button.
+- **Cache only with no tab matching** — does not satisfy FR-011 on open.
 
-## R4 — Arrastar cartões (FR-013)
+## R3 — Representation of the “chosen section”
 
-**Decision**: Incluir **SortableJS** (um único ficheiro `vendor/sortable.min.js` ou pacote npm copiado para `extension/vendor/`) ligado ao contentor da lista no `popup.html`. Persistir nova ordem com `chrome.storage.local` após `onEnd`.
+**Decision**: Store a **stable CSS selector** generated at selection time (path with `nth-of-type` / similar to the clicked element) and, on first save, also persist an **initial snapshot** (sanitized `innerHTML`: remove `<script>`, `on*` attributes, `javascript:` URLs) to show immediately in the popup even before the first refresh.
 
-**Rationale**: Arrastar com pointer events puro é trabalhoso; a spec autoriza um pacote só para isto. Mantém o resto em vanilla.
+**Rationale**: Balances simplicity and re-readability. Selectors break when the DOM changes — already covered in the spec (reconfigure entry).
 
 **Alternatives considered**:
 
-- **HTML5 drag-and-drop nativo** — viável mas UX inconsistente entre browsers; Sortable é um ficheiro e API pequena.
-- **Só botões subir/descer** — cumpre FR sem dependência; reservar como fallback se Sortable falhar no popup (raro).
+- **XPath only** — equivalent; CSS selector is familiar for debugging.
+- **Crop coordinates only** — fragile with responsive layout.
 
-## R5 — Permissões (FR-012)
+## R4 — Drag cards (FR-013)
 
-**Decision**: Manifest V3 com `host_permissions`: `https://*/*` e `http://*/*` (ou `<all_urls>` se necessário para ficheiros locais — provavelmente não). `permissions`: `storage`, `scripting`, `tabs`, `activeTab` opcional se quiseres reduzir declarações (mas com scraping genérico, `tabs` + host broad é o caminho simples).
+**Decision**: Include **SortableJS** (single file `vendor/sortable.min.js` or npm package copied to `extension/vendor/`) wired to the list container in `popup.html`. Persist new order with `chrome.storage.local` after `onEnd`.
 
-**Rationale**: Alinhado com clarificação “uso pessoal, permissões largas”.
+**Rationale**: Drag with raw pointer events is heavy work; the spec allows one package for this. Keeps the rest vanilla.
 
-**Alternatives considered**: `optional_host_permissions` por domínio — rejeitado pelo utilizador na clarificação.
+**Alternatives considered**:
 
-## R6 — UI: clean, bordas arredondadas (input do plano)
+- **Native HTML5 drag-and-drop** — viable but inconsistent UX across browsers; Sortable is one file and a small API.
+- **Move-up/move-down buttons only** — satisfies FR with no dependency; reserve as fallback if Sortable fails in the popup (rare).
 
-**Decision**: Tema **claro neutro** (fundo `#f4f4f5`, cartões brancos), **border-radius 12px** nos cartões, **8px** em botões e inputs, sombra suave (`box-shadow` discreta), tipografia sistema (`system-ui`), espaçamento generoso, ícones inline SVG ou Unicode para ações (abrir, atualizar, remover) para evitar pipeline de assets.
+## R5 — Permissions (FR-012)
 
-**Rationale**: Cumpre pedido de design simples e legível no espaço limitado do popup; tudo em CSS sem framework.
+**Decision**: Manifest V3 with `host_permissions`: `https://*/*` and `http://*/*` (or `<all_urls>` if local files are needed — probably not). `permissions`: `storage`, `scripting`, `tabs`, `activeTab` optional to reduce declarations (but for generic scraping, `tabs` + broad host is the simple path).
+
+**Rationale**: Aligned with clarification “personal use, broad permissions”.
+
+**Alternatives considered**: `optional_host_permissions` per domain — rejected by user in clarification.
+
+## R6 — UI: clean, rounded corners (plan input)
+
+**Decision**: **Neutral light** theme (background `#f4f4f5`, white cards), **border-radius 12px** on cards, **8px** on buttons and inputs, soft shadow (subtle `box-shadow`), system typography (`system-ui`), generous spacing, inline SVG or Unicode icons for actions (open, refresh, remove) to avoid an asset pipeline.
+
+**Rationale**: Meets simple, readable design in limited popup space; all CSS, no framework.

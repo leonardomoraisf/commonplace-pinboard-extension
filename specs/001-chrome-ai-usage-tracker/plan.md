@@ -1,39 +1,39 @@
-# Implementation Plan: Painel unificado de uso de IA (Chrome)
+# Implementation Plan: Unified AI usage panel (Chrome)
 
 **Branch**: `001-chrome-ai-usage-tracker` | **Date**: 2026-03-19 | **Spec**: [`spec.md`](./spec.md)  
-**Input**: Feature specification + clarificações (popup, refresh, permissões amplas, reordenação, abrir URL dedicado) + stack **HTML/CSS/JavaScript** simples; **SortableJS** permitido para arrasto; UI **clean**, bordas arredondadas.
+**Input**: Feature specification + clarifications (popup, refresh, broad permissions, reordering, dedicated open URL) + **HTML/CSS/JavaScript** stack; **SortableJS** allowed for drag; **clean** UI, rounded corners.
 
 ## Summary
 
-Construir uma extensão **Chrome Manifest V3** com **popup** que lista **cartões** (uma **entrada monitorizada** por cartão): título, favicon, **amostra** da secção (HTML sanitizado em cache), ações **abrir URL** (novo separador), **atualizar**, **editar título**, **reconfigurar/remover**, e **+** para novo URL com **fluxo de seleção** num separador real. Persistência em **`chrome.storage.local`**. **Sem** frameworks de UI; **SortableJS** (ficheiro em `vendor/`) para **reordenação** persistida. Pré-visualização **não** usa iframe cross-origin; usa **content scripts** / separadores com cookies do perfil e **CSS selector** guardado (ver [`research.md`](./research.md)).
+Build a **Chrome Manifest V3** **popup** extension that lists **cards** (one **monitored entry** per card): title, favicon, **sample** of the section (sanitized HTML in cache), **open URL** (new tab), **refresh**, **edit title**, **reconfigure/remove**, and **+** for a new URL with **selection flow** in a real tab. Persistence in **`chrome.storage.local`**. **No** UI frameworks; **SortableJS** (file in `vendor/`) for **persisted** reordering. Preview **does not** use cross-origin iframe; uses **content scripts** / tabs with profile cookies and a stored **CSS selector** (see [`research.md`](./research.md)).
 
 ## Technical Context
 
-**Language/Version**: JavaScript (ES2020+), HTML5, CSS3 — sem TypeScript/build obrigatório no MVP.  
-**Primary Dependencies**: **SortableJS** (única dependência JS opcional, cópia local); APIs Chrome (MV3).  
-**Storage**: `chrome.storage.local` — esquema em [`contracts/storage.schema.json`](./contracts/storage.schema.json) e [`data-model.md`](./data-model.md).  
-**Testing**: Manual conforme [`quickstart.md`](./quickstart.md); testes automatizados opcionais (ex.: funções puras de sanitização extraídas para ficheiro testável com `node:test`).  
+**Language/Version**: JavaScript (ES2020+), HTML5, CSS3 — no mandatory TypeScript/build for MVP.  
+**Primary Dependencies**: **SortableJS** (only optional JS dependency, local copy); Chrome APIs (MV3).  
+**Storage**: `chrome.storage.local` — schema in [`contracts/storage.schema.json`](./contracts/storage.schema.json) and [`data-model.md`](./data-model.md).  
+**Testing**: Manual per [`quickstart.md`](./quickstart.md); optional automated tests (e.g. pure sanitization functions in a file testable with `node:test`).  
 **Target Platform**: Google Chrome (MV3).  
 **Project Type**: browser-extension (popup + service worker + content scripts).  
-**Performance Goals**: Popup utilizável com até ~10 entradas; refresh sequencial aceitável (sem polling contínuo).  
-**Constraints**: Stack simples (pedido do autor); popup com altura/largura limitadas — scroll global + scroll interno por amostra; permissões **amplas** `https://*/*` (e `http` se necessário) alinhadas a FR-012.  
-**Scale/Scope**: 1 utilizador, ~10–20 entradas, amostras com HTML cache limitado (~500KB por entrada recomendado).
+**Performance Goals**: Popup usable with up to ~10 entries; sequential refresh acceptable (no continuous polling).  
+**Constraints**: Simple stack (author request); popup with limited height/width — global scroll + per-sample internal scroll; **broad** permissions `https://*/*` (and `http` if needed) aligned with FR-012.  
+**Scale/Scope**: 1 user, ~10–20 entries, samples with limited HTML cache (~500KB per entry recommended).
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Verificado contra [`.specify/memory/constitution.md`](../../.specify/memory/constitution.md) **v1.0.0** (2026-03-19).
+Verified against [`.specify/memory/constitution.md`](../../.specify/memory/constitution.md) **v1.0.0** (2026-03-19).
 
 | Principle | Status |
 |-----------|--------|
-| I. Plain web platform MVP | **Pass** — ES2020+ HTML/CSS/JS; SortableJS em `vendor/`; sem TS/build obrigatório. |
-| II. Chrome Manifest V3 compliance | **Pass** — MV3, service worker, permissões documentadas. |
+| I. Plain web platform MVP | **Pass** — ES2020+ HTML/CSS/JS; SortableJS in `vendor/`; no mandatory TS/build. |
+| II. Chrome Manifest V3 compliance | **Pass** — MV3, service worker, documented permissions. |
 | III. Contract-first storage and messaging | **Pass** — `contracts/storage.schema.json`, `contracts/messages.md`. |
-| IV. Testing and lint discipline | **Pass** — `quickstart.md` para manual; testes auto opcionais até haver `package.json`. |
-| V. Specification-driven delivery | **Pass** — plano derivado de `spec.md` e branch `001-chrome-ai-usage-tracker`. |
+| IV. Testing and lint discipline | **Pass** — `quickstart.md` for manual; optional auto tests until `package.json` exists. |
+| V. Specification-driven delivery | **Pass** — plan derived from `spec.md` and branch `001-chrome-ai-usage-tracker`. |
 
-**Pós-fase 1**: Desenho alinha-se a simplicidade (vanilla + um vendor script); sem projetos extra.
+**Post-phase 1**: Design aligns with simplicity (vanilla + one vendor script); no extra projects.
 
 ## Project Structure
 
@@ -48,7 +48,7 @@ specs/001-chrome-ai-usage-tracker/
 ├── contracts/
 │   ├── messages.md
 │   └── storage.schema.json
-└── tasks.md              # (/speckit.tasks — não criado por este comando)
+└── tasks.md              # (/speckit.tasks — not created by this command)
 ```
 
 ### Source Code (repository root)
@@ -68,30 +68,30 @@ extension/
     └── icon16.png … (placeholders)
 ```
 
-**Structure Decision**: Repositório com pasta única **`extension/`** na raiz do projeto para código carregável pelo Chrome; especificações e contratos permanecem em **`specs/001-chrome-ai-usage-tracker/`**.
+**Structure Decision**: Repository with a single **`extension/`** folder at project root for Chrome-loadable code; specs and contracts stay in **`specs/001-chrome-ai-usage-tracker/`**.
 
 ## Phase 0 & Phase 1 outputs
 
 | Artifact | Path | Status |
 |----------|------|--------|
-| Research (decisões) | [`research.md`](./research.md) | Completo |
-| Modelo de dados | [`data-model.md`](./data-model.md) | Completo |
-| Contratos | [`contracts/messages.md`](./contracts/messages.md), [`contracts/storage.schema.json`](./contracts/storage.schema.json) | Completo |
-| Quickstart | [`quickstart.md`](./quickstart.md) | Completo |
+| Research (decisions) | [`research.md`](./research.md) | Complete |
+| Data model | [`data-model.md`](./data-model.md) | Complete |
+| Contracts | [`contracts/messages.md`](./contracts/messages.md), [`contracts/storage.schema.json`](./contracts/storage.schema.json) | Complete |
+| Quickstart | [`quickstart.md`](./quickstart.md) | Complete |
 
 ## Implementation notes (high level)
 
-1. **`manifest.json`**: `manifest_version` 3; `action.default_popup` → `popup.html`; `background` service worker `background.js`; `permissions`: `storage`, `scripting`, `tabs`; `host_permissions`: `https://*/*`, `http://*/*`; `content_scripts` apenas se necessário para match patterns amplos — preferir **`scripting.executeScript`** dinâmico no picker/refresh para controlar quando corre.
-2. **Picker**: ao `PICKER_START`, abrir tab com URL; injetar `picker.js`; overlay com highlight; clique → calcular selector + extrair HTML → sanitizar → `PICKER_RESULT` ao popup.
-3. **Sanitização**: remover `<script>`, `<iframe>`, event handlers, `javascript:`; truncar string grande (ver data-model).
-4. **Popup UI**: lista `#card-list`; cartão com header (favicon, título editável, botões abrir/atualizar/menu); corpo com `.preview` (scroll, max-height); **Sortable** na lista; **+** fixo no topo.
-5. **Refresh**: implementar lógica em [`research.md`](./research.md) R2 (tab match primeiro; cache; separador inativo no refresh explícito).
-6. **Design**: variáveis CSS (`--radius-card: 12px`, `--radius-control: 8px`, `--bg`, `--card`, `--border`, `--accent`); foco visível; contraste razoável.
+1. **`manifest.json`**: `manifest_version` 3; `action.default_popup` → `popup.html`; `background` service worker `background.js`; `permissions`: `storage`, `scripting`, `tabs`; `host_permissions`: `https://*/*`, `http://*/*`; `content_scripts` only if needed for broad match patterns — prefer dynamic **`scripting.executeScript`** in picker/refresh to control when it runs.
+2. **Picker**: on `PICKER_START`, open tab with URL; inject `picker.js`; overlay with highlight; click → compute selector + extract HTML → sanitize → `PICKER_RESULT` to popup.
+3. **Sanitization**: remove `<script>`, `<iframe>`, event handlers, `javascript:`; truncate large strings (see data-model).
+4. **Popup UI**: list `#card-list`; card with header (favicon, editable title, open/refresh/menu buttons); body with `.preview` (scroll, max-height); **Sortable** on list; **+** fixed at top.
+5. **Refresh**: implement logic from [`research.md`](./research.md) R2 (tab match first; cache; inactive tab on explicit refresh).
+6. **Design**: CSS variables (`--radius-card: 12px`, `--radius-control: 8px`, `--bg`, `--card`, `--border`, `--accent`); visible focus; reasonable contrast.
 
 ## Complexity Tracking
 
-Constitution gates N/A; sem violações a justificar. Tabela omitida.
+Constitution gates N/A; no violations to justify. Table omitted.
 
 ## Next step
 
-Executar **`/speckit.tasks`** para gerar `tasks.md` a partir deste plano.
+Run **`/speckit.tasks`** to generate `tasks.md` from this plan.

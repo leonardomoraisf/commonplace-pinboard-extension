@@ -1,26 +1,26 @@
-# Tasks: Painel unificado de uso de IA (Chrome)
+# Tasks: Unified AI usage panel (Chrome)
 
 **Input**: Design documents from `/home/leokr/projects/ai_usage_tracking/specs/001-chrome-ai-usage-tracker/`  
 **Prerequisites**: [`plan.md`](./plan.md), [`spec.md`](./spec.md), [`research.md`](./research.md), [`data-model.md`](./data-model.md), [`contracts/`](./contracts/), [`quickstart.md`](./quickstart.md)
 
-**Tests**: Não solicitados na spec — sem tarefas de teste automático.
+**Tests**: Not requested in the spec — no automated test tasks.
 
-**Organization**: Fases por user story (P1 → P2 → P3), com setup e fundação primeiro.
+**Organization**: Phases by user story (P1 → P2 → P3), with setup and foundation first.
 
 ## Format: `[ID] [P?] [Story] Description`
 
-- **[P]**: Paralelizável (ficheiros diferentes, sem dependência de tarefas incompletas do mesmo lote)
-- **[Story]**: [US1]…[US4] nas fases de histórias
+- **[P]**: Parallelizable (different files, no dependency on incomplete tasks in the same batch)
+- **[Story]**: [US1]…[US4] in story phases
 
 ## Path Conventions
 
-Código da extensão na raiz do repo: `extension/` (ver [`plan.md`](./plan.md)).
+Extension code at repo root: `extension/` (see [`plan.md`](./plan.md)).
 
 ---
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Estrutura do projeto e ficheiros estáticos mínimos.
+**Purpose**: Project structure and minimal static files.
 
 - [X] T001 Create directory tree `extension/`, `extension/content/`, `extension/vendor/`, `extension/icons/` at repo root per `specs/001-chrome-ai-usage-tracker/plan.md`
 - [X] T002 Create `extension/manifest.json` (MV3, `action.default_popup` → `popup.html`, `background` service worker `background.js`, `permissions`: `storage`, `scripting`, `tabs`, `host_permissions`: `https://*/*`, `http://*/*`)
@@ -31,9 +31,9 @@ Código da extensão na raiz do repo: `extension/` (ver [`plan.md`](./plan.md)).
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Infra partilhada entre popup e service worker — **nenhuma user story começa antes disto**.
+**Purpose**: Shared infra between popup and service worker — **no user story starts before this**.
 
-**⚠️ CRITICAL**: Bloqueia todas as fases US1–US4.
+**⚠️ CRITICAL**: Blocks all US1–US4 phases.
 
 - [X] T005 Create `extension/storage.js` with load/save of `monitoredEntries` in `chrome.storage.local`, order normalization, and UUID helpers per `specs/001-chrome-ai-usage-tracker/data-model.md`
 - [X] T006 [P] Create `extension/sanitize.js` exporting `sanitizePreviewHtml(html)` (strip `script`, `iframe`, inline event handlers, `javascript:` URLs; truncate per data-model size guidance)
@@ -41,15 +41,15 @@ Código da extensão na raiz do repo: `extension/` (ver [`plan.md`](./plan.md)).
 - [X] T008 Create `extension/popup.html` scaffold: header with `+` control, container `#card-list`, script tags for `storage.js`, `vendor/sortable.min.js`, `popup.js`
 - [X] T009 [P] Create `extension/popup.css` with design tokens (`--radius-card: 12px`, `--radius-control: 8px`), card layout, list scroll, preview `max-height` + inner scroll per plan/spec
 
-**Checkpoint**: Fundação pronta — iniciar US1.
+**Checkpoint**: Foundation ready — start US1.
 
 ---
 
-## Phase 3: User Story 1 — Adicionar uma nova página monitorizada (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 — Add a new monitored page (Priority: P1) 🎯 MVP
 
-**Goal**: Fluxo `+` → URL → seleção de secção num separador → nova entrada na lista com amostra e persistência após reabrir o browser.
+**Goal**: `+` → URL → section selection in a tab → new entry in list with sample and persistence after browser restart.
 
-**Independent Test**: Um URL real (ex. dashboard); após fluxo, cartão aparece com pré-visualização; reiniciar Chrome e confirmar entrada ainda presente ([`spec.md`](./spec.md) US1).
+**Independent Test**: A real URL (e.g. dashboard); after flow, card appears with preview; restart Chrome and confirm entry still present ([`spec.md`](./spec.md) US1).
 
 ### Implementation for User Story 1
 
@@ -59,15 +59,15 @@ Código da extensão na raiz do repo: `extension/` (ver [`plan.md`](./plan.md)).
 - [X] T013 [US1] Implement add flow in `extension/popup.js`: URL input (validate `http`/`https`), `chrome.runtime.sendMessage` `PICKER_START`, on success append `MonitoredEntry` with new `id`, `order` = max+1, `saveEntries` via `storage.js`
 - [X] T014 [US1] Render card row in `extension/popup.js` (and minimal markup in `extension/popup.html`) showing header stub + `.preview` filled with sanitized cached HTML for each entry
 
-**Checkpoint**: US1 funcional e testável sozinha (MVP).
+**Checkpoint**: US1 functional and testable alone (MVP).
 
 ---
 
-## Phase 4: User Story 2 — Ver áreas, scroll, refresh, abrir URL, reordenar (Priority: P2)
+## Phase 4: User Story 2 — View areas, scroll, refresh, open URL, reorder (Priority: P2)
 
-**Goal**: Lista vertical com scroll no popup; refresh ao abrir + refresh por entrada; botão dedicado abrir URL em novo separador; reordenação manual persistida (SortableJS).
+**Goal**: Vertical list with scroll in popup; refresh on open + per-entry refresh; dedicated button to open URL in new tab; manual reorder persisted (SortableJS).
 
-**Independent Test**: Duas entradas; scroll; reordenar e reiniciar browser; abrir URL dedicado; refresh com e sem separador aberto ([`spec.md`](./spec.md) US2, [`research.md`](./research.md) R2).
+**Independent Test**: Two entries; scroll; reorder and restart browser; dedicated open URL; refresh with and without open tab ([`spec.md`](./spec.md) US2, [`research.md`](./research.md) R2).
 
 ### Implementation for User Story 2
 
@@ -78,15 +78,15 @@ Código da extensão na raiz do repo: `extension/` (ver [`plan.md`](./plan.md)).
 - [X] T019 [US2] Add dedicated per-card “open full page” control in `extension/popup.js` using `chrome.tabs.create({ url: entry.pageUrl })` (never sole action on preview click)
 - [X] T020 [US2] Initialize Sortable on `#card-list` in `extension/popup.js` (`onEnd` reindex `order`, `saveEntries`)
 
-**Checkpoint**: US1 + US2 testáveis em conjunto.
+**Checkpoint**: US1 + US2 testable together.
 
 ---
 
-## Phase 5: User Story 3 — Título e favicon (Priority: P3)
+## Phase 5: User Story 3 — Title and favicon (Priority: P3)
 
-**Goal**: Título opcional na criação; favicon visível; editar título depois sem perder favicon/secção.
+**Goal**: Optional title at creation; visible favicon; edit title later without losing favicon/section.
 
-**Independent Test**: Criar com título automático e manual; editar título num cartão existente; favicon visível ([`spec.md`](./spec.md) US3).
+**Independent Test**: Create with automatic and manual title; edit title on existing card; favicon visible ([`spec.md`](./spec.md) US3).
 
 ### Implementation for User Story 3
 
@@ -94,27 +94,27 @@ Código da extensão na raiz do repo: `extension/` (ver [`plan.md`](./plan.md)).
 - [X] T022 [US3] Display `faviconUrl` on each card header in `extension/popup.js` / `extension/popup.css` with sensible fallback when missing
 - [X] T023 [US3] Implement inline title edit (e.g. double-click or edit icon) + persist `title` only in `extension/popup.js`
 
-**Checkpoint**: US3 completa.
+**Checkpoint**: US3 complete.
 
 ---
 
-## Phase 6: User Story 4 — Extensão fácil a novas páginas (Priority: P2)
+## Phase 6: User Story 4 — Easy extension to new pages (Priority: P2)
 
-**Goal**: Mesmo fluxo para qualquer URL genérico; referências opcionais às páginas exemplo (Cursor / Codex).
+**Goal**: Same flow for any generic URL; optional references to example pages (Cursor / Codex).
 
-**Independent Test**: Adicionar URL diferente dos exemplos; UI não depende de lista fixa de domínios ([`spec.md`](./spec.md) US4, FR-009).
+**Independent Test**: Add URL different from examples; UI does not depend on a fixed domain list ([`spec.md`](./spec.md) US4, FR-009).
 
 ### Implementation for User Story 4
 
 - [X] T024 [US4] Add empty-state or helper copy in `extension/popup.html` / `extension/popup.js` linking or listing example URLs (informational only, non-blocking) per FR-009
 
-**Checkpoint**: US4 satisfeita (principalmente validação + copy; lógica já genérica na US1).
+**Checkpoint**: US4 satisfied (mostly validation + copy; logic already generic in US1).
 
 ---
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-**Purpose**: Erros, reconfigurar, remover, validação manual.
+**Purpose**: Errors, reconfigure, remove, manual validation.
 
 - [X] T025 [P] Add user-visible error handling for invalid URL, load failures, and picker cancel in `extension/popup.js` and `extension/background.js`
 - [X] T026 [P] Implement reconfigure flow: `PICKER_START` with `entryId` updating `pageUrl`/`selector`/`previewHtml` for that entry in `extension/background.js` + UI entry point in `extension/popup.js` per FR-010
@@ -147,18 +147,18 @@ US1 (P1) ──► US4 (P2)   [generic flow already in US1; US4 is UX hints]
 
 ### Parallel Opportunities
 
-- **Phase 1**: T003 e T004 em paralelo (após T001–T002).
-- **Phase 2**: T006 e T009 em paralelo com T005 (ficheiros distintos); T007 depois de T005–T006.
-- **Phase 7**: T025, T026, T027 em paralelo se diferentes secções de ficheiros e merges cuidadosos.
+- **Phase 1**: T003 and T004 in parallel (after T001–T002).
+- **Phase 2**: T006 and T009 in parallel with T005 (different files); T007 after T005–T006.
+- **Phase 7**: T025, T026, T027 in parallel if different file sections and careful merges.
 
 ### Parallel Example: Phase 2
 
 ```text
-# Após T001–T002, em paralelo:
+# After T001–T002, in parallel:
 T003 — extension/icons/*.png
 T004 — extension/vendor/sortable.min.js
 
-# Após T005 iniciado, em paralelo onde possível:
+# After T005 started, in parallel where possible:
 T006 — extension/sanitize.js
 T009 — extension/popup.css
 ```
@@ -166,8 +166,8 @@ T009 — extension/popup.css
 ### Parallel Example: User Story 1
 
 ```text
-T010 — extension/content/picker.js (pode ser desenvolvido em paralelo com T008 refinamentos,
-       mas integração T011 requer T007 + T010 completos)
+T010 — extension/content/picker.js (can be developed in parallel with T008 refinements,
+       but T011 integration needs T007 + T010 complete)
 ```
 
 ---
@@ -178,23 +178,23 @@ T010 — extension/content/picker.js (pode ser desenvolvido em paralelo com T008
 
 1. Complete Phase 1 + Phase 2  
 2. Complete Phase 3 (US1)  
-3. **STOP** — validar com [`quickstart.md`](./quickstart.md) cenário de adição + persistência  
+3. **STOP** — validate with [`quickstart.md`](./quickstart.md) add + persistence scenario  
 
 ### Incremental Delivery
 
 1. US1 → MVP  
-2. US2 → painel completo (scroll, refresh, abrir, drag)  
-3. US3 → polish identidade visual por cartão  
-4. US4 → hints exemplo  
-5. Phase 7 → erros, reconfigurar, remover, checklist final  
+2. US2 → full panel (scroll, refresh, open, drag)  
+3. US3 → polish per-card identity  
+4. US4 → example hints  
+5. Phase 7 → errors, reconfigure, remove, final checklist  
 
 ---
 
 ## Notes
 
-- Cada tarefa inclui caminho de ficheiro explícito para execução por agente/LLM.  
-- Contratos de mensagens: [`contracts/messages.md`](./contracts/messages.md).  
-- Schema storage: [`contracts/storage.schema.json`](./contracts/storage.schema.json).  
+- Each task includes an explicit file path for agent/LLM execution.  
+- Message contracts: [`contracts/messages.md`](./contracts/messages.md).  
+- Storage schema: [`contracts/storage.schema.json`](./contracts/storage.schema.json).  
 
 ---
 

@@ -1,11 +1,11 @@
-# Quickstart: desenvolvimento e teste local
+# Quickstart: local development and testing
 
-## Pré-requisitos
+## Prerequisites
 
-- Google Chrome recente (Manifest V3).
-- Este repositório clonado em `/home/leokr/projects/ai_usage_tracking` (ou equivalente).
+- Recent Google Chrome (Manifest V3).
+- This repository cloned at `/home/leokr/projects/ai_usage_tracking` (or equivalent).
 
-## Estrutura prevista (após implementação)
+## Expected structure (after implementation)
 
 ```text
 extension/
@@ -17,33 +17,33 @@ extension/
 ├── content/
 │   └── picker.js
 ├── vendor/
-│   └── sortable.min.js   # SortableJS, cópia local
+│   └── sortable.min.js   # SortableJS, local copy
 └── icons/
     └── *.png
 ```
 
-## Carregar a extensão unpacked
+## Load the unpacked extension
 
-1. Abrir `chrome://extensions`.
-2. Ativar **Modo de programador**.
-3. **Carregar sem compactação** → escolher a pasta `extension/` na raiz do repo (criada na implementação).
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. **Load unpacked** → choose the `extension/` folder at repo root (created during implementation).
 
-## Fluxo de teste manual
+## Manual test flow
 
-1. Clicar no ícone da extensão → abre o **popup**.
-2. **+** → introduzir `https://cursor.com/dashboard/spending` (ou URL de teste) → confirmar → separador abre com modo seleção → clicar na região desejada → verificar cartão no popup com amostra.
-3. Repetir para segunda URL (ex. página Codex) e confirmar **scroll** na lista.
-4. **Arrastar** cartões → fechar browser → reabrir → confirmar **ordem** (SC-002).
-5. **Abrir página completa** pelo controlo dedicado → novo separador com URL correto.
-6. **Atualizar** uma entrada sem o site aberto → confirmar abertura temporária ou mensagem + cache conforme plano.
+1. Click the extension icon → **popup** opens.
+2. **+** → enter `https://cursor.com/dashboard/spending` (or test URL) → confirm → tab opens in selection mode → click desired region → verify card in popup with sample.
+3. Repeat for a second URL (e.g. Codex page) and confirm **scroll** in the list.
+4. **Drag** cards → close browser → reopen → confirm **order** (SC-002).
+5. **Open full page** via dedicated control → new tab with correct URL.
+6. **Refresh** an entry without the site open → confirm temporary open or message + cache per plan.
 
-## Design (referência rápida)
+## Design (quick reference)
 
-- Cartões: fundo branco, `border-radius: 12px`, sombra leve.
-- Botões e inputs: `border-radius: 8px`, estados `:focus-visible` visíveis.
-- Lista: `max-height` no contentor com `overflow-y: auto` no popup.
+- Cards: white background, `border-radius: 12px`, light shadow.
+- Buttons and inputs: `border-radius: 8px`, visible `:focus-visible` states.
+- List: `max-height` on container with `overflow-y: auto` in popup.
 
-## Notas
+## Notes
 
-- Estar **autenticado** nos sites alvo nos separadores normais ajuda o matcher de tabs; o botão **atualizar** cobre o caso sem separador aberto.
-- Para desenvolvimento, após alterar `manifest.json` ou service worker, usar **Recarregar** em `chrome://extensions`.
+- Being **authenticated** on target sites in normal tabs helps tab matching; the **refresh** button covers the case with no open tab.
+- For development, after changing `manifest.json` or the service worker, use **Reload** on `chrome://extensions`.

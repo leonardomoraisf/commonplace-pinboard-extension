@@ -1,7 +1,7 @@
 # Extension message contracts
 
-Convenção: mensagens JSON-serializáveis via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage`.  
-Todos os payloads incluem `type: string`.
+Convention: JSON-serializable messages via `chrome.runtime.sendMessage` / `chrome.tabs.sendMessage`.  
+All payloads include `type: string`.
 
 ## Popup ↔ Service worker
 
@@ -9,17 +9,17 @@ Todos os payloads incluem `type: string`.
 
 - **Direction**: popup → service worker  
 - **Payload**: `{ type: 'PICKER_START', url: string, entryId?: string, title?: string }`
-- **Behavior**: Abre um separador com `url` e injeta o picker para selecionar vários campos.
+- **Behavior**: Opens a tab with `url` and injects the picker to select multiple fields.
 
 ### `PICKER_RESULT`
 
-- **Direction**: service worker → popup (após picker)
+- **Direction**: service worker → popup (after picker)
 - **Payload**: `{ type: 'PICKER_RESULT', ok: true, pageUrl: string, title: string, faviconUrl?: string, fields: { id: string, label: string, selector: string, valueText: string }[] }`
 - **Error**: `{ type: 'PICKER_RESULT', ok: false, error: string }`
 
 ### `ENTRIES_GET`
 
-- **Direction**: popup → service worker (opcional; pode ler storage diretamente no popup)  
+- **Direction**: popup → service worker (optional; popup may read storage directly)  
 - **Payload**: `{ type: 'ENTRIES_GET' }`  
 - **Response**: `{ type: 'ENTRIES_DATA', entries: MonitoredEntry[] }`
 
@@ -36,10 +36,10 @@ Todos os payloads incluem `type: string`.
 
 ## Content script (picker)
 
-### Seleção
+### Selection
 
-- Ao clique final: calcular `selector`, ler o texto visível do elemento, pedir um nome para o campo, e repetir até o utilizador finalizar.
+- On final click: compute `selector`, read visible text from the element, prompt for a field name, repeat until the user finishes.
 
-## Erros
+## Errors
 
-- Códigos humanos em `error` (string curta). Popup mostra banner.
+- Human-readable codes in `error` (short string). Popup shows a banner.
