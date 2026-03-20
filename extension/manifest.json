@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "AI Usage Ledger",
+  "description": "Unified popup for tracking AI usage dashboards and sections.",
+  "version": "0.1.0",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Usage Ledger",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "scripting", "tabs"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

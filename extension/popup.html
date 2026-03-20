@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Usage Ledger</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <section class="list-region" aria-label="Tracked sections">
+        <div class="list-region__head">
+          <div>
+            <div class="list-region__eyebrow">Live list</div>
+            <h2 class="list-region__title">Tracked sections</h2>
+          </div>
+          <div class="list-region__tools">
+            <div id="list-summary" class="list-region__summary">Sorted by your manual order</div>
+            <div class="list-region__actions">
+              <button id="reload-pages" class="ghost-button list-region__refresh" type="button">
+                ↺ Reload pages
+              </button>
+              <button id="refresh-all" class="ghost-button list-region__refresh" type="button">
+                ↻ Refresh all
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="status-banner" class="status-banner" role="status" aria-live="polite"></div>
+        <div id="card-list" class="card-list" role="list"></div>
+      </section>
+
+      <section id="composer-panel" class="composer composer--collapsed" aria-label="Add or reconfigure an entry">
+        <form id="entry-form" class="composer__form" autocomplete="off">
+          <div class="composer__grid">
+            <label class="field field--url">
+              <span class="field__label">Page URL</span>
+              <input
+                id="entry-url"
+                class="input"
+                type="url"
+                inputmode="url"
+                placeholder="https://example.com/dashboard"
+                maxlength="2048"
+                required
+              />
+            </label>
+
+            <label class="field field--title">
+              <span class="field__label">Custom title</span>
+              <input
+                id="entry-title"
+                class="input"
+                type="text"
+                placeholder="Optional label for the card"
+                maxlength="200"
+              />
+            </label>
+
+            <button id="entry-submit" class="primary-button" type="submit">
+              <span class="primary-button__plus">+</span>
+              <span class="primary-button__label">Start picking</span>
+            </button>
+          </div>
+
+          <div class="composer__meta">
+            <p id="composer-help" class="composer__help">
+              Any <code>http</code> or <code>https</code> page works. Click specific values on the
+              page, name each one, and finish when you have the fields you want.
+            </p>
+            <div class="composer__mode">
+              <span id="composer-mode" class="mode-chip">New entry</span>
+              <button id="composer-cancel" class="ghost-button" type="button" hidden>
+                Cancel reconfigure
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <header class="hero" aria-label="AI Usage Ledger">
+        <div class="hero__copy">
+          <div class="hero__eyebrow">Personal AI atlas</div>
+          <h1 class="hero__title">AI Usage Ledger</h1>
+          <p class="hero__subtitle">
+            Pin the sections you care about, keep them in one ordered view, and reopen the
+            popup whenever you need a live snapshot.
+          </p>
+        </div>
+        <div class="hero__stats">
+          <div id="entry-count" class="hero__stat-value">0</div>
+          <div class="hero__stat-label">tracked panels</div>
+          <div id="sync-status" class="hero__stat-state">Ready</div>
+          <button
+            id="toggle-composer"
+            class="ghost-button hero__toggle"
+            type="button"
+            aria-pressed="false"
+          >
+            Add link
+          </button>
+        </div>
+      </header>
+    </div>
+    <div id="card-menu-layer" class="card-menu-layer" aria-hidden="true"></div>
+
+    <script src="storage.js"></script>
+    <script src="sanitize.js"></script>
+    <script src="vendor/sortable.min.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

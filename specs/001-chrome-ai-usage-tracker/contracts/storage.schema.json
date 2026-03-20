@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.spec/ai-usage-tracker/storage.schema.json",
+  "title": "Chrome storage.local — monitoredEntries",
+  "type": "object",
+  "required": ["monitoredEntries"],
+  "properties": {
+    "monitoredEntries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/monitoredEntry" },
+      "maxItems": 50
+    }
+  },
+  "$defs": {
+    "monitoredEntry": {
+      "type": "object",
+      "required": ["id", "pageUrl", "title", "order", "fields"],
+      "properties": {
+        "id": { "type": "string", "minLength": 8 },
+        "pageUrl": { "type": "string", "format": "uri" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "faviconUrl": { "type": "string", "format": "uri" },
+        "order": { "type": "integer", "minimum": 0 },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/monitoredField" }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "monitoredField": {
+      "type": "object",
+      "required": ["id", "label", "selector"],
+      "properties": {
+        "id": { "type": "string", "minLength": 8 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "selector": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "valueText": { "type": "string", "maxLength": 4000 }
+      },
+      "additionalProperties": false
+    }
+  }
+}
