@@ -31,7 +31,15 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify against [`.specify/memory/constitution.md`](../../.specify/memory/constitution.md) (see version line in that file).
+
+| Principle | Gate (must pass or justify in **Complexity Tracking** below) |
+|-----------|----------------------------------------------------------------|
+| I. Plain web platform MVP | Stack matches spec/plan (ES2020+ HTML/CSS/JS); optional JS deps vendored as in plan; no unapproved MVP build/TS unless spec requires it. |
+| II. Chrome Manifest V3 compliance | MV3 manifest, service worker, and messaging/content-script approach are documented and feasible. |
+| III. Contract-first storage and messaging | `contracts/` defines storage schema and cross-context messages before code depends on them. |
+| IV. Testing and lint discipline | If `package.json` has `test`/`lint`, plan states how they stay green; otherwise `quickstart.md` covers P1 manual verification. |
+| V. Specification-driven delivery | Plan traces to `spec.md` stories/FRs; scope matches feature branch; tasks will be story-grouped when generated. |
 
 ## Project Structure
 

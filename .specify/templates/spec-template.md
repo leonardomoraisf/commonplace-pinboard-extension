@@ -5,6 +5,10 @@
 **Status**: Draft  
 **Input**: User description: "$ARGUMENTS"
 
+**Constitution**: Keep requirements **technology-agnostic** except where the **product channel** (e.g. Chrome extension) is
+itself a requirement. Delivery constraints agents apply in `plan.md` live in
+[`.specify/memory/constitution.md`](../../.specify/memory/constitution.md).
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--

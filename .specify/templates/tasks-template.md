@@ -23,6 +23,8 @@ description: "Task list template for feature implementation"
 - **Single project**: `src/`, `tests/` at repository root
 - **Web app**: `backend/src/`, `frontend/src/`
 - **Mobile**: `api/src/`, `ios/src/` or `android/src/`
+- **Chrome extension (this repo)**: `extension/` (or path from `plan.md`) with `manifest.json`, service worker,
+  popup/assets, optional `content/`, `vendor/` for third-party scripts, `icons/`
 - Paths shown below assume single project - adjust based on plan.md structure
 
 <!-- 

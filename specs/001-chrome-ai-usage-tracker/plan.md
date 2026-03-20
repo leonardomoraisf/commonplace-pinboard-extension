@@ -23,7 +23,15 @@ Construir uma extensão **Chrome Manifest V3** com **popup** que lista **cartõe
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-O ficheiro [`.specify/memory/constitution.md`](../../.specify/memory/constitution.md) está ainda como **template placeholder** (sem princípios ratificados). **Não há gates aplicáveis** — registo explícito: *N/A — constitution não preenchida; nenhuma violação avaliada.*
+Verificado contra [`.specify/memory/constitution.md`](../../.specify/memory/constitution.md) **v1.0.0** (2026-03-19).
+
+| Principle | Status |
+|-----------|--------|
+| I. Plain web platform MVP | **Pass** — ES2020+ HTML/CSS/JS; SortableJS em `vendor/`; sem TS/build obrigatório. |
+| II. Chrome Manifest V3 compliance | **Pass** — MV3, service worker, permissões documentadas. |
+| III. Contract-first storage and messaging | **Pass** — `contracts/storage.schema.json`, `contracts/messages.md`. |
+| IV. Testing and lint discipline | **Pass** — `quickstart.md` para manual; testes auto opcionais até haver `package.json`. |
+| V. Specification-driven delivery | **Pass** — plano derivado de `spec.md` e branch `001-chrome-ai-usage-tracker`. |
 
 **Pós-fase 1**: Desenho alinha-se a simplicidade (vanilla + um vendor script); sem projetos extra.
 
