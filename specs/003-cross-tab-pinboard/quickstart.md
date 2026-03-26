@@ -6,7 +6,7 @@
 
 1. Open any `http` or `https` page with selectable content.
 2. Open the extension popup.
-3. Click **Pin from this tab** (or enter a URL and use **Open picker in new tab**).
+3. Click **Pin From This Tab**.
 4. In the picker overlay, click the content to capture; name it if needed; click **Save pin**.
 5. Optional: save additional pins from the same page; click **Done** to close the picker.
 6. Confirm the new pin appears in the list with preview and source hostname.
@@ -29,7 +29,8 @@
 ## Refresh / trust
 
 1. With the source page open in a compatible tab, use **Refresh** on a pin or **Refresh all** when available.
-2. On failure: the last snapshot remains; an error or stale state is shown; use **Re-pin** after navigating to the page if needed.
+2. If the current tab is not the source page, use **Re-pin** and let the extension open the saved source URL for capture.
+3. On failure: the last snapshot remains; an error or stale state is shown; use **Re-pin** after navigating to the page if needed.
 
 ## Failure cases to spot-check
 

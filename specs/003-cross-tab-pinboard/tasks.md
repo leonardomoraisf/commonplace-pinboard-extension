@@ -28,9 +28,9 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 **Purpose**: Confirm baseline tooling and extension layout before design and implementation.
 
-- [ ] T001 Verify MV3 wiring (popup, service worker, content script, permissions) matches pinboard scope in `extension/manifest.json`
-- [ ] T002 [P] Confirm `npm test` and `npm run lint` scripts and dependencies at repository root `package.json`
-- [ ] T003 [P] Confirm `extension/vendor/sortable.min.js` and `extension/sanitize.js` remain valid for reuse in pin capture and list reorder
+- [X] T001 Verify MV3 wiring (popup, service worker, content script, permissions) matches pinboard scope in `extension/manifest.json`
+- [X] T002 [P] Confirm `npm test` and `npm run lint` scripts and dependencies at repository root `package.json`
+- [X] T003 [P] Confirm `extension/vendor/sortable.min.js` and `extension/sanitize.js` remain valid for reuse in pin capture and list reorder
 
 ---
 
@@ -40,13 +40,13 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 **⚠️ CRITICAL**: No user story implementation should proceed until design artifacts and `extension/storage.js` / `extension/background.js` pin alignment are in place per [`plan.md`](./plan.md).
 
-- [ ] T004 Capture rework decisions (single vs multi capture per session, minimum pin shape, refresh behavior, visual repositioning criteria) in `specs/003-cross-tab-pinboard/research.md`
-- [ ] T005 Define `Pin` and source-reference fields, normalization, and migration from legacy monitored-entry semantics in `specs/003-cross-tab-pinboard/data-model.md`
-- [ ] T006 [P] Document popup ↔ background ↔ content script message names and payloads after pin-oriented rename in `specs/003-cross-tab-pinboard/contracts/messages.md`
-- [ ] T007 [P] Define persisted pin collection JSON shape for `chrome.storage.local` in `specs/003-cross-tab-pinboard/contracts/storage.schema.json`
-- [ ] T008 [P] Describe manual flows (create, cross-tab read, rename, remove, reorder, reopen, refresh failures) in `specs/003-cross-tab-pinboard/quickstart.md`
-- [ ] T009 Implement pin load/save/normalize (replacing `monitoredEntries`-oriented behavior) in `extension/storage.js` per `data-model.md` and `storage.schema.json`
-- [ ] T010 Align service worker routing, message names, and payloads for pin lifecycle operations in `extension/background.js` per `contracts/messages.md`
+- [X] T004 Capture rework decisions (single vs multi capture per session, minimum pin shape, refresh behavior, visual repositioning criteria) in `specs/003-cross-tab-pinboard/research.md`
+- [X] T005 Define `Pin` and source-reference fields, normalization, and migration from legacy monitored-entry semantics in `specs/003-cross-tab-pinboard/data-model.md`
+- [X] T006 [P] Document popup ↔ background ↔ content script message names and payloads after pin-oriented rename in `specs/003-cross-tab-pinboard/contracts/messages.md`
+- [X] T007 [P] Define persisted pin collection JSON shape for `chrome.storage.local` in `specs/003-cross-tab-pinboard/contracts/storage.schema.json`
+- [X] T008 [P] Describe manual flows (create, cross-tab read, rename, remove, reorder, reopen, refresh failures) in `specs/003-cross-tab-pinboard/quickstart.md`
+- [X] T009 Implement pin load/save/normalize (replacing `monitoredEntries`-oriented behavior) in `extension/storage.js` per `data-model.md` and `storage.schema.json`
+- [X] T010 Align service worker routing, message names, and payloads for pin lifecycle operations in `extension/background.js` per `contracts/messages.md`
 
 **Checkpoint**: Foundation ready — user story phases can begin.
 
@@ -60,11 +60,11 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Adapt picker output to a single saved pin snapshot per save action (and session behavior per `research.md`) in `extension/content/picker.js`
-- [ ] T012 [US1] Implement pin creation flow: capture confirmation, custom title, default title from page or content, and messaging to background/storage in `extension/popup.js`
-- [ ] T013 [P] [US1] Replace AI-centric creation UI copy and structure with pin-centric, general-purpose labels in `extension/popup.html`
-- [ ] T014 [P] [US1] Restyle creation-related popup regions for neutral pinboard identity (not AI tracker) in `extension/popup.css`
-- [ ] T015 [US1] Provide clear feedback when capture fails or content is not meaningful, without altering existing pins, in `extension/content/picker.js` and `extension/popup.js`
+- [X] T011 [P] [US1] Adapt picker output to a single saved pin snapshot per save action (and session behavior per `research.md`) in `extension/content/picker.js`
+- [X] T012 [US1] Implement pin creation flow: capture confirmation, custom title, default title from page or content, and messaging to background/storage in `extension/popup.js`
+- [X] T013 [P] [US1] Replace AI-centric creation UI copy and structure with pin-centric, general-purpose labels in `extension/popup.html`
+- [X] T014 [P] [US1] Restyle creation-related popup regions for neutral pinboard identity (not AI tracker) in `extension/popup.css`
+- [X] T015 [US1] Provide clear feedback when capture fails or content is not meaningful, without altering existing pins, in `extension/content/picker.js` and `extension/popup.js`
 
 **Checkpoint**: New pins can be created from arbitrary pages with FR-001–FR-005, FR-015, FR-016 (capture path), FR-017–FR-020 (creation UI) addressed for this flow.
 
@@ -78,10 +78,10 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Load and render all persisted pins with compact preview and source reference in `extension/popup.js`
-- [ ] T017 [P] [US2] Structure pin list markup for scanning (title, preview, source cues) in `extension/popup.html`
-- [ ] T018 [P] [US2] Style list and preview for neutral general-purpose pinboard in `extension/popup.css`
-- [ ] T019 [US2] Ensure cross-tab read uses persisted storage only (pins survive source tab closure) in `extension/popup.js` and `extension/storage.js`
+- [X] T016 [US2] Load and render all persisted pins with compact preview and source reference in `extension/popup.js`
+- [X] T017 [P] [US2] Structure pin list markup for scanning (title, preview, source cues) in `extension/popup.html`
+- [X] T018 [P] [US2] Style list and preview for neutral general-purpose pinboard in `extension/popup.css`
+- [X] T019 [US2] Ensure cross-tab read uses persisted storage only (pins survive source tab closure) in `extension/popup.js` and `extension/storage.js`
 
 **Checkpoint**: FR-003, FR-006, FR-007, FR-008 (read path), FR-012 (display of timestamps may be completed in US4), FR-016 (read path) satisfied for cross-tab access.
 
@@ -95,10 +95,10 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 ### Implementation for User Story 3
 
-- [ ] T020 [P] [US3] Implement rename with persisted title in `extension/popup.js` and `extension/storage.js`
-- [ ] T021 [P] [US3] Integrate `extension/vendor/sortable.min.js` for drag reorder and persist order in `extension/popup.js` and `extension/popup.html`
-- [ ] T022 [US3] Implement remove-pin action without affecting other pins in `extension/popup.js` and `extension/storage.js`
-- [ ] T023 [US3] Implement “open source URL” from a pin via background tab handling in `extension/background.js` and `extension/popup.js`
+- [X] T020 [P] [US3] Implement rename with persisted title in `extension/popup.js` and `extension/storage.js`
+- [X] T021 [P] [US3] Integrate `extension/vendor/sortable.min.js` for drag reorder and persist order in `extension/popup.js` and `extension/popup.html`
+- [X] T022 [US3] Implement remove-pin action without affecting other pins in `extension/popup.js` and `extension/storage.js`
+- [X] T023 [US3] Implement “open source URL” from a pin via background tab handling in `extension/background.js` and `extension/popup.js`
 
 **Checkpoint**: FR-008–FR-011 and organize acceptance scenarios for US3 are met.
 
@@ -112,10 +112,10 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 ### Implementation for User Story 4
 
-- [ ] T024 [US4] Display created and last-refreshed/captured timestamps on each pin in `extension/popup.js` and `extension/popup.html`
-- [ ] T025 [US4] Implement refresh or re-capture from source (picker + background + popup) in `extension/content/picker.js`, `extension/background.js`, and `extension/popup.js`
-- [ ] T026 [US4] On refresh failure or structural mismatch, preserve last saved content and show clear recapture guidance in `extension/popup.js`
-- [ ] T027 [P] [US4] Style error/stale/trust states in `extension/popup.css`
+- [X] T024 [US4] Display created and last-refreshed/captured timestamps on each pin in `extension/popup.js` and `extension/popup.html`
+- [X] T025 [US4] Implement refresh or re-capture from source (picker + background + popup) in `extension/content/picker.js`, `extension/background.js`, and `extension/popup.js`
+- [X] T026 [US4] On refresh failure or structural mismatch, preserve last saved content and show clear recapture guidance in `extension/popup.js`
+- [X] T027 [P] [US4] Style error/stale/trust states in `extension/popup.css`
 
 **Checkpoint**: FR-012–FR-014 and US4 acceptance scenarios satisfied; edge cases for auth loss and invalid URLs covered per [`spec.md`](./spec.md).
 
@@ -125,8 +125,8 @@ Chrome MV3 extension under `extension/` with `manifest.json`, service worker, po
 
 **Purpose**: Extension metadata, documentation, and validation across stories.
 
-- [ ] T028 [P] Update extension name, description, and any user-visible strings still implying AI-only scope in `extension/manifest.json`
-- [ ] T029 [P] Align product description with pinboard positioning at repository root `README.md`
+- [X] T028 [P] Update extension name, description, and any user-visible strings still implying AI-only scope in `extension/manifest.json`
+- [X] T029 [P] Align product description with pinboard positioning at repository root `README.md`
 - [ ] T030 Execute and reconcile gaps against manual steps in `specs/003-cross-tab-pinboard/quickstart.md`
 - [ ] T031 Run `npm test && npm run lint` from repository root and fix any regressions introduced by this feature
 

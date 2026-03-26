@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-usage-tracking.local/specs/003-cross-tab-pinboard/contracts/storage.schema.json",
+  "title": "Commonplace pin storage",
+  "type": "object",
+  "required": [
+    "pins"
+  ],
+  "properties": {
+    "pins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pin"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "pin": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "pageUrl",
+        "selector",
+        "savedContent",
+        "previewText",
+        "order",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "pageUrl": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "pageTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "faviconUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "selector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "savedContent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12000
+        },
+        "previewText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
