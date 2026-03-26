@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "AI Usage Ledger",
-  "description": "Unified popup for tracking AI usage dashboards and sections.",
+  "name": "Commonplace Pinboard",
+  "description": "Capture saved page snapshots and reopen them from any tab.",
   "version": "0.1.0",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "AI Usage Ledger",
+    "default_title": "Commonplace Pinboard",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

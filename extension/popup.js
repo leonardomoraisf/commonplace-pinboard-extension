@@ -5,15 +5,17 @@
     return;
   }
 
+  var VIEW_LAYOUT_STORAGE_KEY = 'pinboardViewLayout';
+
   var state = {
-    entries: [],
+    pins: [],
+    activeTab: null,
     editingTitleId: null,
-    editingField: null,
-    reconfigureEntryId: null,
-    cardMenuEntryId: null,
-    sortable: null,
+    openMenuPinId: null,
+    repinPinId: null,
+    sortableInstances: [],
+    viewLayout: 'grouped',
     busy: false,
-    composerVisible: false,
   };
 
   var dom = {};
@@ -53,68 +55,6 @@
     });
   }
 
-  function tabsReload(tabId) {
-    return callbackToPromise(function (resolve) {
-      chrome.tabs.reload(tabId, {}, resolve);
-    });
-  }
-
-  function formatRelativeTime(value) {
-    if (!value) {
-      return 'Never updated';
-    }
-
-    var timestamp = new Date(value);
-    if (Number.isNaN(timestamp.getTime())) {
-      return 'Never updated';
-    }
-
-    var seconds = Math.round((Date.now() - timestamp.getTime()) / 1000);
-    if (seconds < 30) {
-      return 'Updated just now';
-    }
-
-    var units = [
-      ['day', 86400],
-      ['hour', 3600],
-      ['minute', 60],
-    ];
-
-    for (var index = 0; index < units.length; index += 1) {
-      var unit = units[index];
-      if (seconds >= unit[1]) {
-        var amount = Math.round(seconds / unit[1]);
-        return 'Updated ' + amount + ' ' + unit[0] + (amount === 1 ? '' : 's') + ' ago';
-      }
-    }
-
-    return 'Updated moments ago';
-  }
-
-  function formatShortDate(value) {
-    if (!value) {
-      return '';
-    }
-
-    var date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    return date.toLocaleString([], {
-      dateStyle: 'short',
-      timeStyle: 'short',
-    });
-  }
-
-  function firstHostname(value) {
-    try {
-      return new URL(value).hostname.replace(/^www\./, '');
-    } catch (_error) {
-      return value;
-    }
-  }
-
   function normalizePath(pathname) {
     if (!pathname) {
       return '/';
@@ -127,962 +67,953 @@
     return pathname;
   }
 
-  function isCompatibleTabUrl(entryUrl, tabUrl) {
+  function isCompatibleTabUrl(pinUrl, tabUrl) {
     try {
-      var entry = new URL(entryUrl);
+      var pin = new URL(pinUrl);
       var tab = new URL(tabUrl);
 
-      if (entry.origin !== tab.origin) {
+      if (pin.origin !== tab.origin) {
         return false;
       }
 
-      var entryPath = normalizePath(entry.pathname);
+      var pinPath = normalizePath(pin.pathname);
       var tabPath = normalizePath(tab.pathname);
 
       return (
-        tabPath === entryPath ||
-        tabPath.indexOf(entryPath + '/') === 0 ||
-        entryPath.indexOf(tabPath + '/') === 0
+        tabPath === pinPath ||
+        tabPath.indexOf(pinPath + '/') === 0 ||
+        pinPath.indexOf(tabPath + '/') === 0
       );
     } catch (_error) {
       return false;
     }
   }
 
-  function isNumericish(value) {
-    var text = String(value || '').trim();
-    return /^[\d.,%+-]+$/.test(text) || /^\d+(\.\d+)?\s*%$/.test(text);
+  function getHostname(value) {
+    try {
+      return new URL(value).hostname.replace(/^www\./, '');
+    } catch (_error) {
+      return value || 'Unknown page';
+    }
   }
 
-  function updateSyncStatus(text, kind) {
-    dom.syncStatus.textContent = text;
+  function normalizeViewLayout(value) {
+    return value === 'flat' ? 'flat' : 'grouped';
+  }
+
+  function groupPinsForDisplay(pins) {
+    var byHost = new Map();
+    pins.forEach(function (pin) {
+      var host = getHostname(pin.pageUrl);
+      if (!byHost.has(host)) {
+        byHost.set(host, []);
+      }
+      byHost.get(host).push(pin);
+    });
+
+    var groups = [];
+    byHost.forEach(function (list, host) {
+      list.sort(function (left, right) {
+        return left.order - right.order;
+      });
+      var minOrder = list.reduce(function (acc, pin) {
+        return Math.min(acc, pin.order);
+      }, list[0].order);
+      groups.push({ host: host, pins: list, minOrder: minOrder });
+    });
+
+    groups.sort(function (left, right) {
+      if (left.minOrder !== right.minOrder) {
+        return left.minOrder - right.minOrder;
+      }
+      return left.host.localeCompare(right.host);
+    });
+
+    return groups;
+  }
+
+  function buildPinCardHtml(pin, index) {
+    var isEditing = state.editingTitleId === pin.id;
+    var isMenuOpen = state.openMenuPinId === pin.id;
+    var faviconMarkup = pin.faviconUrl
+      ? '<img src="' +
+        escapeHtml(pin.faviconUrl) +
+        '" alt="" referrerpolicy="no-referrer" loading="lazy" />'
+      : '<span>' +
+        escapeHtml((pin.title || '?').trim().charAt(0).toUpperCase() || '?') +
+        '</span>';
+    var titleMarkup = isEditing
+      ? '<input class="pin-card__title-input" type="text" maxlength="' +
+        String(AIUsageStorage.MAX_TITLE_LENGTH) +
+        '" value="' +
+        escapeHtml(pin.title) +
+        '" />'
+      : '<button class="pin-card__title-button" type="button" data-action="edit-title" aria-label="Rename pin">' +
+        escapeHtml(pin.title) +
+        '</button>';
+    var editMarkup =
+      '<div class="pin-card__edit-actions">' +
+      '<button class="pin-action pin-action--accent" type="button" data-action="save-title">Save</button>' +
+      '<button class="pin-action" type="button" data-action="cancel-title">Cancel</button>' +
+      '</div>';
+    var menuMarkup =
+      '<div class="pin-card__menu">' +
+      '<button class="pin-card__menu-toggle" type="button" data-action="toggle-menu" aria-label="Open pin actions" aria-expanded="' +
+      String(isMenuOpen) +
+      '">•••</button>' +
+      '<div class="pin-card__actions' +
+      (isMenuOpen ? ' pin-card__actions--open' : '') +
+      '">' +
+      '<button class="pin-action" type="button" data-action="refresh">Refresh</button>' +
+      '<button class="pin-action" type="button" data-action="repin">Re-pin</button>' +
+      '<button class="pin-action" type="button" data-action="open">Open</button>' +
+      '<button class="pin-action pin-action--danger" type="button" data-action="remove">Remove</button>' +
+      '</div>' +
+      '</div>';
+    var statusMarkup = pin.syncError
+      ? '<span class="pin-card__status pin-card__status--error">Needs re-pin</span>'
+      : '<span class="pin-card__status">Saved snapshot</span>';
+    var errorMarkup = pin.syncError
+      ? '<div class="pin-card__error">' + escapeHtml(pin.syncError) + '</div>'
+      : '';
+
+    return (
+      '<article class="pin-card' +
+      (isMenuOpen ? ' pin-card--menu-open' : '') +
+      '" role="listitem" data-pin-id="' +
+      escapeHtml(pin.id) +
+      '" style="--pin-order:' +
+      index +
+      ';">' +
+      '<div class="pin-card__top">' +
+      '<button class="pin-handle" type="button" data-action="drag" aria-label="Drag to reorder">::</button>' +
+      '<div class="pin-card__favicon">' +
+      faviconMarkup +
+      '</div>' +
+      '<div class="pin-card__info">' +
+      titleMarkup +
+      (isEditing ? editMarkup : '') +
+      '<div class="pin-card__meta">' +
+      '<span class="pin-card__meta-item">' +
+      escapeHtml(getHostname(pin.pageUrl)) +
+      '</span>' +
+      '<span class="pin-card__meta-item">' +
+      statusMarkup +
+      '</span>' +
+      '</div>' +
+      '<div class="pin-card__preview">' +
+      escapeHtml(pin.previewText || pin.savedContent) +
+      '</div>' +
+      '</div>' +
+      (isEditing ? '' : '<div class="pin-card__toolbar">' + menuMarkup + '</div>') +
+      '</div>' +
+      errorMarkup +
+      '<div class="pin-card__snapshot">' +
+      '<details class="pin-card__details">' +
+      '<summary>Full saved snapshot</summary>' +
+      '<pre class="pin-card__saved-content">' + escapeHtml(pin.savedContent) + '</pre>' +
+      '</details>' +
+      '</div>' +
+      '<div class="pin-card__timestamp">' +
+      '<span title="' + escapeHtml(formatExactTime(pin.createdAt)) + '">Captured ' + escapeHtml(formatRelativeTime(pin.createdAt)) + '</span>' +
+      '<span title="' + escapeHtml(formatExactTime(pin.updatedAt)) + '">Updated ' + escapeHtml(formatRelativeTime(pin.updatedAt)) + '</span>' +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function formatRelativeTime(value) {
+    if (!value) {
+      return 'Not refreshed yet';
+    }
+
+    var timestamp = new Date(value);
+    if (Number.isNaN(timestamp.getTime())) {
+      return 'Not refreshed yet';
+    }
+
+    var seconds = Math.round((Date.now() - timestamp.getTime()) / 1000);
+    if (seconds < 30) {
+      return 'Moments ago';
+    }
+
+    var units = [
+      ['day', 86400],
+      ['hour', 3600],
+      ['minute', 60],
+    ];
+
+    for (var index = 0; index < units.length; index += 1) {
+      var unit = units[index];
+      if (seconds >= unit[1]) {
+        var amount = Math.round(seconds / unit[1]);
+        return amount + ' ' + unit[0] + (amount === 1 ? '' : 's') + ' ago';
+      }
+    }
+
+    return 'Moments ago';
+  }
+
+  function formatExactTime(value) {
+    if (!value) {
+      return '';
+    }
+
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    return date.toLocaleString([], {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }
+
+  function getPin(pinId) {
+    return state.pins.find(function (pin) {
+      return pin.id === pinId;
+    });
+  }
+
+  function getEditingInput(pinId) {
+    var selector = '[data-pin-id="' + CSS.escape(pinId) + '"] .pin-card__title-input';
+    return dom.pinList.querySelector(selector);
+  }
+
+  function updateStatus(text, kind) {
     dom.statusBanner.textContent = text;
-    dom.statusBanner.dataset.kind = kind || 'idle';
+    dom.statusBanner.setAttribute('data-kind', kind || 'idle');
+  }
+
+  function updateHero() {
+    dom.pinCount.textContent = String(state.pins.length);
+
+    if (state.activeTab && AIUsageStorage.isHttpUrl(state.activeTab.url || '')) {
+      dom.currentTabHost.textContent = getHostname(state.activeTab.url);
+    } else {
+      dom.currentTabHost.textContent = 'Unavailable';
+    }
+  }
+
+  function updateBoardSummary() {
+    if (!state.pins.length) {
+      dom.boardSummary.textContent = 'Pins stay readable from any tab.';
+      return;
+    }
+
+    dom.boardSummary.textContent =
+      state.pins.length === 1
+        ? '1 saved pin in your manual order.'
+        : state.pins.length + ' saved pins in your manual order.';
+  }
+
+  function updateCapturePanel() {
+    var repinPin = state.repinPinId ? getPin(state.repinPinId) : null;
+    var activeTabSupported =
+      state.activeTab && AIUsageStorage.isHttpUrl((state.activeTab && state.activeTab.url) || '');
+    var canCaptureFromTab = Boolean(activeTabSupported);
+
+    if (repinPin) {
+      var canUseCurrentTab =
+        activeTabSupported && isCompatibleTabUrl(repinPin.pageUrl, state.activeTab.url || '');
+
+      dom.captureHeading.textContent = canUseCurrentTab ? 'Re-pin From This Tab' : 'Re-pin From Source';
+      dom.captureModeBadge.textContent = canUseCurrentTab ? 'Current page' : 'Source page';
+      dom.captureHelp.textContent = canUseCurrentTab
+        ? 'The current tab matches this pin. Open the picker, click the updated content, and save the replacement snapshot.'
+        : 'The current tab does not match this pin. Commonplace will open the saved source page, start the picker there, and replace the snapshot you choose.';
+      dom.captureButton.textContent = canUseCurrentTab ? 'Re-pin From This Tab' : 'Open Source For Re-pin';
+      dom.captureCancel.hidden = false;
+      dom.captureButton.disabled = state.busy;
+
+      if (!dom.captureTitle.value) {
+        dom.captureTitle.value = repinPin.title;
+      }
+
+      return;
+    }
+
+    dom.captureHeading.textContent = 'Pin From This Tab';
+    dom.captureModeBadge.textContent = 'Current page';
+    dom.captureHelp.textContent =
+      'Open the picker on this tab, click the content you want, name it if needed, and save each snapshot directly into the board.';
+    dom.captureButton.textContent = 'Pin From This Tab';
+    dom.captureCancel.hidden = true;
+    dom.captureButton.disabled = state.busy || !canCaptureFromTab;
+
+    if (!canCaptureFromTab) {
+      updateStatus('Open an http or https page to capture a new pin.', 'error');
+    }
   }
 
   function setBusy(isBusy) {
     state.busy = isBusy;
-    dom.entrySubmit.disabled = isBusy;
-    dom.entryUrl.disabled = isBusy;
-    dom.entryTitle.disabled = isBusy;
-    if (dom.refreshAll) {
-      dom.refreshAll.disabled = isBusy || !state.entries.length;
-    }
-    if (dom.reloadPages) {
-      dom.reloadPages.disabled = isBusy || !state.entries.length;
-    }
-  }
-
-  function setComposerVisible(visible) {
-    state.composerVisible = visible;
-    dom.composerPanel.classList.toggle('composer--collapsed', !visible);
-    dom.toggleComposer.textContent = visible ? 'Hide add form' : 'Add link';
-    dom.toggleComposer.setAttribute('aria-pressed', String(visible));
-  }
-
-  function setComposerMode(entry) {
-    if (entry) {
-      state.reconfigureEntryId = entry.id;
-      setComposerVisible(true);
-      dom.composerMode.textContent = 'Reconfigure: ' + entry.title;
-      dom.composerCancel.hidden = false;
-      dom.entrySubmit.querySelector('.primary-button__label').textContent = 'Update fields';
-      dom.entryUrl.value = entry.pageUrl;
-      dom.entryTitle.value = entry.title;
-      dom.entryUrl.focus();
-      dom.entryUrl.select();
-      return;
+    dom.captureTitle.disabled = isBusy;
+    dom.captureButton.disabled =
+      isBusy ||
+      (!state.repinPinId &&
+        !(state.activeTab && AIUsageStorage.isHttpUrl((state.activeTab && state.activeTab.url) || '')));
+    dom.captureCancel.disabled = isBusy;
+    dom.refreshAll.disabled = isBusy || !state.pins.length;
+    if (dom.pinViewLayout) {
+      dom.pinViewLayout.disabled = isBusy;
     }
 
-    state.reconfigureEntryId = null;
-    dom.composerMode.textContent = 'New site';
-    dom.composerCancel.hidden = true;
-    dom.entrySubmit.querySelector('.primary-button__label').textContent = 'Start picking';
-  }
+    Array.prototype.forEach.call(dom.pinList.querySelectorAll('button, input'), function (element) {
+      if (element.id === 'capture-title') {
+        return;
+      }
 
-  function clearComposerInputs() {
-    dom.entryUrl.value = '';
-    dom.entryTitle.value = '';
-  }
+      if (element.classList.contains('pin-card__title-input')) {
+        element.disabled = isBusy;
+        return;
+      }
 
-  function getStoredEntry(entryId) {
-    return state.entries.find(function (entry) {
-      return entry.id === entryId;
+      if (element.closest('.pin-card')) {
+        element.disabled = isBusy;
+      }
     });
   }
 
-  function syncEntryCount() {
-    dom.entryCount.textContent = String(state.entries.length);
-    dom.listSummary.textContent = state.entries.length > 0 ? 'Sorted by your manual order' : 'No entries yet';
-    if (dom.refreshAll) {
-      dom.refreshAll.disabled = state.busy || !state.entries.length;
-    }
-    if (dom.reloadPages) {
-      dom.reloadPages.disabled = state.busy || !state.entries.length;
-    }
-  }
-
-  function getFieldEditingInput() {
-    if (!state.editingField) {
-      return null;
-    }
-
-    var entrySelector = '[data-entry-id="' + CSS.escape(state.editingField.entryId) + '"]';
-    var fieldSelector = '[data-action="field-label-input"][data-field-id="' + CSS.escape(state.editingField.fieldId) + '"]';
-    return dom.cardList.querySelector(entrySelector + ' ' + fieldSelector);
-  }
-
-  function clearFieldLabelEdit() {
-    state.editingField = null;
-  }
-
-  function setFieldLabelEdit(entryId, fieldId) {
-    if (!entryId || !fieldId) {
-      return;
-    }
-
-    state.editingTitleId = null;
-    state.cardMenuEntryId = null;
-    state.editingField = {
-      entryId: entryId,
-      fieldId: fieldId,
-    };
-    render();
-  }
-
-  function closeCardMenu() {
-    if (state.cardMenuEntryId === null) {
-      return;
-    }
-
-    state.cardMenuEntryId = null;
-    if (dom.cardMenuLayer) {
-      dom.cardMenuLayer.innerHTML = '';
-      dom.cardMenuLayer.setAttribute('aria-hidden', 'true');
-    }
-  }
-
-  function renderCardMenuLayer() {
-    if (!dom.cardMenuLayer) {
-      return;
-    }
-
-    if (state.cardMenuEntryId === null) {
-      dom.cardMenuLayer.innerHTML = '';
-      dom.cardMenuLayer.setAttribute('aria-hidden', 'true');
-      return;
-    }
-
-    var entry = getStoredEntry(state.cardMenuEntryId);
-    if (!entry) {
-      closeCardMenu();
-      return;
-    }
-
-    var card = dom.cardList.querySelector('[data-entry-id="' + CSS.escape(entry.id) + '"]');
-    var toggleButton = card && card.querySelector('[data-action="toggle-menu"]');
-    if (!card || !toggleButton) {
-      closeCardMenu();
-      return;
-    }
-
-    dom.cardMenuLayer.setAttribute('aria-hidden', 'false');
-    dom.cardMenuLayer.innerHTML =
-      '<div class="card__menu card__menu--open" data-entry-id="' +
-      escapeHtml(entry.id) +
-      '">' +
-      '<button class="card__menu-item" type="button" data-action="edit-title">' +
-      (state.editingTitleId === entry.id ? 'Done' : 'Edit title') +
-      '</button>' +
-      '<button class="card__menu-item card__menu-item--accent" type="button" data-action="reconfigure">Re-pin</button>' +
-      '<button class="card__menu-item" type="button" data-action="open">Open</button>' +
-      '<button class="card__menu-item card__menu-item--danger" type="button" data-action="remove">Remove</button>' +
+  function renderEmptyState() {
+    dom.pinList.removeAttribute('role');
+    dom.pinList.innerHTML =
+      '<div class="empty-state" role="note">' +
+      '<div class="empty-state__eyebrow">Archive ready</div>' +
+      '<h3 class="empty-state__title">No pins yet</h3>' +
+      '<p class="empty-state__text">Open any http or https page, capture a useful line, number, or heading, and it will stay here as a saved snapshot you can revisit from every other tab.</p>' +
       '</div>';
-
-    var menu = dom.cardMenuLayer.querySelector('.card__menu');
-    if (!menu) {
-      return;
-    }
-
-    var buttonRect = toggleButton.getBoundingClientRect();
-    var menuRect = menu.getBoundingClientRect();
-    var left = Math.min(window.innerWidth - menuRect.width - 12, Math.max(12, buttonRect.right - menuRect.width));
-    var top = buttonRect.top - menuRect.height - 10;
-
-    if (top < 12) {
-      top = buttonRect.bottom + 10;
-    }
-
-    menu.style.left = Math.max(12, left) + 'px';
-    menu.style.top = Math.max(12, top) + 'px';
   }
 
-  function renderField(field) {
-    var value = field.valueText || 'No value';
-    var numeric = isNumericish(value);
-    var isEditingField =
-      state.editingField &&
-      state.editingField.entryId === field.entryId &&
-      state.editingField.fieldId === field.id;
-
-    return (
-      '<div class="field-stat' +
-      (numeric ? ' field-stat--numeric' : '') +
-      (isEditingField ? ' field-stat--editing' : '') +
-      '">' +
-      (isEditingField
-        ? '<input class="input field-stat__label-input" type="text" maxlength="' +
-          String(AIUsageStorage.MAX_FIELD_LABEL_LENGTH) +
-          '" value="' +
-          escapeHtml(field.label) +
-          '" data-action="field-label-input" data-entry-id="' +
-          escapeHtml(field.entryId) +
-          '" data-field-id="' +
-          escapeHtml(field.id) +
-          '" />'
-        : '<button class="field-stat__label-button" type="button" data-action="edit-field-label" data-entry-id="' +
-          escapeHtml(field.entryId) +
-          '" data-field-id="' +
-          escapeHtml(field.id) +
-          '">' +
-          escapeHtml(field.label) +
-          '</button>') +
-      '<div class="field-stat__value">' + escapeHtml(value) + '</div>' +
-      '</div>'
-    );
-  }
-
-  function render() {
-    var scrollTop = dom.appShell.scrollTop;
-    syncEntryCount();
-
-    if (!state.entries.length) {
-      dom.cardList.innerHTML =
-        '<div class="empty-state" role="note">' +
-        '<h3 class="empty-state__title">Nothing pinned yet</h3>' +
-        '<p class="empty-state__text">Start with Cursor spending, ChatGPT / Codex, or any other http/https page. Pick multiple values from the screen and give each one a name.</p>' +
-        '<div class="seed-rail">' +
-        '<button class="seed-chip" type="button" data-seed-url="https://cursor.com/dashboard/spending">Cursor spending</button>' +
-        '<button class="seed-chip" type="button" data-seed-url="https://chatgpt.com/">ChatGPT / Codex</button>' +
-        '</div>' +
-        '</div>';
-      dom.appShell.scrollTop = scrollTop;
+  function renderPins() {
+    if (!state.pins.length) {
+      renderEmptyState();
       updateListInteractions();
       return;
     }
 
-    dom.cardList.innerHTML = state.entries
-      .map(function (entry, index) {
-        var faviconMarkup = entry.faviconUrl
-          ? '<img src="' + escapeHtml(entry.faviconUrl) + '" alt="" referrerpolicy="no-referrer" loading="lazy" />'
-          : '<span>' + escapeHtml((entry.title || '?').trim().charAt(0).toUpperCase() || '?') + '</span>';
-        var editMode = state.editingTitleId === entry.id;
-        var fieldCount = entry.fields.length;
-        var errorText = entry.syncError ? '<span class="card__error">Sync: ' + escapeHtml(entry.syncError) + '</span>' : '';
+    var orderIndex = 0;
 
-        return (
-          '<article class="card' +
-          (editMode ? ' is-editing' : '') +
-          '" role="listitem" data-entry-id="' +
-          escapeHtml(entry.id) +
-          '" style="--card-order:' +
-          index +
-          ';">' +
-          '<div class="card__top">' +
-          '<div class="card__identity">' +
-          '<div class="favicon">' + faviconMarkup + '</div>' +
-          '<div class="card__body">' +
-          '<div class="card__title-row">' +
-          '<input class="input card__title-input" type="text" maxlength="200" value="' +
-          escapeHtml(entry.title) +
-          '" data-action="title-input" />' +
-          '<span class="card__title-view">' + escapeHtml(entry.title) + '</span>' +
-          '</div>' +
-          '<div class="card__meta">' +
-          '<span><strong>' + escapeHtml(firstHostname(entry.pageUrl)) + '</strong></span>' +
-          '<span>' + fieldCount + ' fields</span>' +
-          '<span title="' + escapeHtml(formatShortDate(entry.updatedAt)) + '">' +
-          escapeHtml(formatRelativeTime(entry.updatedAt)) +
-          '</span>' +
-          errorText +
-          '</div>' +
-          '</div>' +
-          '</div>' +
-          '<div class="card__actions">' +
-          '<button class="action-button action-button--grab" type="button" data-action="drag" title="Drag to reorder" aria-label="Drag to reorder">⋮⋮</button>' +
-          '<button class="action-button action-button--menu" type="button" data-action="toggle-menu" aria-expanded="' +
-          String(state.cardMenuEntryId === entry.id) +
-          '" aria-label="More actions">' +
-          '⋯' +
-          '</button>' +
-          '</div>' +
-          '</div>' +
-          '<div class="field-grid">' +
-          entry.fields
-            .map(function (field) {
-              return renderField(Object.assign({ entryId: entry.id }, field));
+    if (state.viewLayout === 'flat') {
+      dom.pinList.setAttribute('role', 'list');
+      dom.pinList.innerHTML = state.pins
+        .map(function (pin) {
+          return buildPinCardHtml(pin, orderIndex++);
+        })
+        .join('');
+    } else {
+      dom.pinList.setAttribute('role', 'presentation');
+      var groups = groupPinsForDisplay(state.pins);
+      dom.pinList.innerHTML = groups
+        .map(function (group, groupIndex) {
+          var titleId = 'pin-group-title-' + String(groupIndex);
+          var cardsHtml = group.pins
+            .map(function (pin) {
+              return buildPinCardHtml(pin, orderIndex++);
             })
-            .join('') +
-          '</div>' +
-          '</article>'
-        );
-      })
-      .join('');
-
-    dom.appShell.scrollTop = scrollTop;
-    updateListInteractions();
-    renderCardMenuLayer();
-    focusFieldEditor();
-  }
-
-  function focusFieldEditor() {
-    var input = getFieldEditingInput();
-    if (!input) {
-      return;
+            .join('');
+          return (
+            '<section class="pin-group" aria-labelledby="' +
+            titleId +
+            '">' +
+            '<h3 class="pin-group__title" id="' +
+            titleId +
+            '">' +
+            escapeHtml(group.host) +
+            '</h3>' +
+            '<div class="pin-group__list" role="list">' +
+            cardsHtml +
+            '</div>' +
+            '</section>'
+          );
+        })
+        .join('');
     }
 
-    window.setTimeout(function () {
-      input.focus();
-      input.select();
-    }, 0);
+    updateListInteractions();
+  }
+
+  function syncViewLayoutSelect() {
+    if (!dom.pinViewLayout) {
+      return;
+    }
+    dom.pinViewLayout.value = state.viewLayout;
+  }
+
+  function render() {
+    updateHero();
+    updateBoardSummary();
+    renderPins();
+    syncViewLayoutSelect();
+    updateCapturePanel();
+    setBusy(state.busy);
+  }
+
+  function destroySortableInstances() {
+    state.sortableInstances.forEach(function (instance) {
+      instance.destroy();
+    });
+    state.sortableInstances = [];
   }
 
   function updateListInteractions() {
-    if (state.sortable) {
-      state.sortable.destroy();
-      state.sortable = null;
-    }
+    destroySortableInstances();
 
-    if (!state.entries.length) {
+    if (!state.pins.length) {
       return;
     }
 
-    state.sortable = Sortable.create(dom.cardList, {
-      animation: 170,
-      draggable: '.card',
-      handle: '.action-button--grab',
+    var sortableOptions = {
+      animation: 180,
+      draggable: '.pin-card',
+      handle: '.pin-handle',
       ghostClass: 'is-ghost',
       chosenClass: 'is-chosen',
       dragClass: 'is-dragging',
       onEnd: handleReorder,
+    };
+
+    if (state.viewLayout === 'grouped') {
+      sortableOptions.group = 'pins';
+      Array.prototype.forEach.call(dom.pinList.querySelectorAll('.pin-group__list'), function (
+        listEl
+      ) {
+        state.sortableInstances.push(Sortable.create(listEl, sortableOptions));
+      });
+    } else {
+      state.sortableInstances.push(Sortable.create(dom.pinList, sortableOptions));
+    }
+  }
+
+  async function loadState() {
+    var tabs = await tabsQuery({
+      active: true,
+      currentWindow: true,
     });
+
+    state.activeTab = tabs && tabs.length ? tabs[0] : null;
+    state.pins = await AIUsageStorage.loadPins();
+
+    var storedUi = await callbackToPromise(function (resolve) {
+      chrome.storage.local.get([VIEW_LAYOUT_STORAGE_KEY], resolve);
+    });
+    state.viewLayout = normalizeViewLayout(storedUi[VIEW_LAYOUT_STORAGE_KEY]);
+  }
+
+  async function persistPins(nextPins, statusText) {
+    var syncErrorsById = state.pins.reduce(function (accumulator, pin) {
+      if (pin.syncError) {
+        accumulator[pin.id] = pin.syncError;
+      }
+
+      return accumulator;
+    }, {});
+    var savedPins = await AIUsageStorage.savePins(nextPins);
+    state.pins = savedPins.map(function (pin) {
+      return syncErrorsById[pin.id]
+        ? Object.assign({}, pin, { syncError: syncErrorsById[pin.id] })
+        : pin;
+    });
+    render();
+    if (statusText) {
+      updateStatus(statusText, 'success');
+    }
   }
 
   async function handleReorder() {
-    var cardIds = Array.prototype.slice.call(dom.cardList.querySelectorAll('.card')).map(function (card) {
-      return card.dataset.entryId;
-    });
+    var pinIds = Array.prototype.slice
+      .call(dom.pinList.querySelectorAll('.pin-card'))
+      .map(function (card) {
+        return card.getAttribute('data-pin-id');
+      });
 
-    state.entries = cardIds
-      .map(function (id, index) {
-        var entry = getStoredEntry(id);
-        if (!entry) {
+    var nextPins = pinIds
+      .map(function (pinId, index) {
+        var pin = getPin(pinId);
+        if (!pin) {
           return null;
         }
 
-        return Object.assign({}, entry, { order: index });
+        return Object.assign({}, pin, { order: index });
       })
       .filter(Boolean);
 
-    state.entries = AIUsageStorage.reindexEntries(state.entries);
-    await AIUsageStorage.saveEntries(state.entries);
-    render();
-    updateSyncStatus('Order saved', 'success');
+    await persistPins(nextPins, 'Pin order saved.');
   }
 
-  async function refreshEntry(entryId, options) {
-    var shouldRender = !options || options.render !== false;
-    var response = await sendMessage({
-      type: 'REFRESH_ENTRY',
-      id: entryId,
-    });
-
-    if (!response || !response.ok) {
-      throw new Error((response && response.error) || 'Refresh failed');
-    }
-
-    state.entries = state.entries.map(function (entry) {
-      if (entry.id !== entryId) {
-        return entry;
-      }
-
-      return Object.assign({}, entry, {
-        fields: response.fields || entry.fields,
-        updatedAt: response.updatedAt,
-        syncError: '',
-      });
-    });
-
-    if (shouldRender) {
-      render();
-    }
-
-    return response;
-  }
-
-  async function refreshAllEntries() {
-    if (!state.entries.length) {
-      updateSyncStatus('Ready', 'idle');
-      return;
-    }
-
-    updateSyncStatus('Refreshing live fields…', 'idle');
-    var hadError = false;
-
-    for (var index = 0; index < state.entries.length; index += 1) {
-      var entry = state.entries[index];
-      try {
-        await refreshEntry(entry.id, { render: false });
-        updateSyncStatus('Refreshed ' + (index + 1) + '/' + state.entries.length, 'success');
-      } catch (error) {
-        hadError = true;
-        state.entries = state.entries.map(function (item) {
-          if (item.id !== entry.id) {
-            return item;
-          }
-
-          return Object.assign({}, item, { syncError: error.message });
-        });
-        updateSyncStatus(error.message, 'error');
-      }
-    }
-
-    render();
-    updateSyncStatus(hadError ? 'Some fields could not refresh' : 'Fields synchronized', hadError ? 'error' : 'success');
-  }
-
-  async function reloadOpenPages() {
-    if (!state.entries.length) {
-      updateSyncStatus('Ready', 'idle');
-      return;
-    }
-
-    updateSyncStatus('Reloading open pages…', 'idle');
-
-    var tabs = await tabsQuery({});
-    var matchingTabs = tabs
-      .filter(function (tab) {
-        return tab && tab.id !== undefined && typeof tab.url === 'string';
-      })
-      .filter(function (tab) {
-        return state.entries.some(function (entry) {
-          return isCompatibleTabUrl(entry.pageUrl, tab.url);
-        });
-      });
-
-    for (var index = 0; index < matchingTabs.length; index += 1) {
-      var tab = matchingTabs[index];
-      await tabsReload(tab.id);
-      await new Promise(function (resolve) {
-        window.setTimeout(resolve, 900);
-      });
-    }
-
-    await new Promise(function (resolve) {
-      window.setTimeout(resolve, 1400);
-    });
-    await refreshAllEntries();
-  }
-
-  async function submitComposer(event) {
-    event.preventDefault();
-
-    var normalizedUrl = AIUsageStorage.normalizeHttpUrl(dom.entryUrl.value);
-    if (!normalizedUrl) {
-      updateSyncStatus('Enter a valid http/https URL', 'error');
-      dom.entryUrl.focus();
-      return;
-    }
-
-    setBusy(true);
-    updateSyncStatus('Opening field picker…', 'idle');
-
-    try {
-      var response = await sendMessage({
-        type: 'PICKER_START',
-        url: normalizedUrl,
-        title: dom.entryTitle.value.trim(),
-        entryId: state.reconfigureEntryId || undefined,
-      });
-
-      if (!response || !response.ok) {
-        throw new Error((response && response.error) || 'Picker failed');
-      }
-
-      state.entries = await AIUsageStorage.loadEntries();
-      state.editingTitleId = null;
-      setComposerMode(null);
-      setComposerVisible(false);
-      clearComposerInputs();
-      render();
-      updateSyncStatus('Fields saved', 'success');
-    } catch (error) {
-      updateSyncStatus(error.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggleTitleEdit(entryId) {
-    if (state.editingTitleId === entryId) {
-      var currentCard = dom.cardList.querySelector('[data-entry-id="' + CSS.escape(entryId) + '"]');
-      var currentInput = currentCard && currentCard.querySelector('[data-action="title-input"]');
-      if (currentInput) {
-        await commitTitleInput(entryId, currentInput);
-      } else {
-        state.editingTitleId = null;
-        render();
-      }
-      return;
-    }
-
-    clearFieldLabelEdit();
-    state.editingTitleId = entryId;
+  function beginTitleEdit(pinId) {
+    state.editingTitleId = pinId;
+    state.openMenuPinId = null;
     render();
 
-    var card = dom.cardList.querySelector('[data-entry-id="' + CSS.escape(entryId) + '"]');
-    if (!card) {
-      return;
-    }
-
-    var input = card.querySelector('[data-action="title-input"]');
+    var input = getEditingInput(pinId);
     if (input) {
       input.focus();
       input.select();
     }
   }
 
-  async function commitTitleInput(entryId, input) {
-    var nextTitle = input.value.trim();
+  function cancelTitleEdit() {
+    state.editingTitleId = null;
+    render();
+  }
+
+  function setPinMenuOpen(pinId, isOpen) {
+    var card = dom.pinList.querySelector('[data-pin-id="' + CSS.escape(pinId) + '"]');
+    if (!card) {
+      return;
+    }
+    var toggle = card.querySelector('.pin-card__menu-toggle');
+    var actions = card.querySelector('.pin-card__actions');
+    if (isOpen) {
+      card.classList.add('pin-card--menu-open');
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+      if (actions) {
+        actions.classList.add('pin-card__actions--open');
+      }
+    } else {
+      card.classList.remove('pin-card--menu-open');
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+      if (actions) {
+        actions.classList.remove('pin-card__actions--open');
+      }
+    }
+  }
+
+  function togglePinMenu(pinId) {
+    var prev = state.openMenuPinId;
+    var next = prev === pinId ? null : pinId;
+    state.openMenuPinId = next;
+
+    if (prev && prev !== next) {
+      setPinMenuOpen(prev, false);
+    }
+    if (next) {
+      setPinMenuOpen(next, true);
+    }
+  }
+
+  function closePinMenu() {
+    var pinId = state.openMenuPinId;
+    if (!pinId) {
+      return;
+    }
+    state.openMenuPinId = null;
+    setPinMenuOpen(pinId, false);
+  }
+
+  async function saveTitle(pinId) {
+    var input = getEditingInput(pinId);
+    if (!input) {
+      state.editingTitleId = null;
+      render();
+      return;
+    }
+
+    var nextTitle = AIUsageStorage.clampText(input.value, AIUsageStorage.MAX_TITLE_LENGTH);
     if (!nextTitle) {
-      updateSyncStatus('Title cannot be empty', 'error');
+      updateStatus('Pin title cannot be empty.', 'error');
       input.focus();
       return;
     }
 
-    state.entries = state.entries.map(function (entry) {
-      if (entry.id !== entryId) {
-        return entry;
-      }
-
-      return Object.assign({}, entry, {
-        title: nextTitle,
-      });
-    });
-
-    state.entries = await AIUsageStorage.saveEntries(state.entries);
     state.editingTitleId = null;
-    clearFieldLabelEdit();
-    render();
-    updateSyncStatus('Title saved', 'success');
+
+    await persistPins(
+      state.pins.map(function (pin) {
+        return pin.id === pinId ? Object.assign({}, pin, { title: nextTitle }) : pin;
+      }),
+      'Pin title saved.'
+    );
   }
 
-  async function handleCardClick(event) {
+  async function removePin(pinId) {
+    var pin = getPin(pinId);
+    if (!pin) {
+      return;
+    }
+
+    if (!window.confirm('Remove "' + pin.title + '"?')) {
+      return;
+    }
+
+    if (state.repinPinId === pinId) {
+      state.repinPinId = null;
+      dom.captureTitle.value = '';
+    }
+
+    await persistPins(AIUsageStorage.removePin(state.pins, pinId), 'Pin removed.');
+  }
+
+  function beginRepin(pinId) {
+    var pin = getPin(pinId);
+    if (!pin) {
+      return;
+    }
+
+    state.repinPinId = pinId;
+    state.editingTitleId = null;
+    dom.captureTitle.value = pin.title;
+    render();
+    dom.captureTitle.focus();
+    dom.captureTitle.select();
+    updateStatus('Re-pin mode ready. Start from the current tab or the saved source page.', 'idle');
+  }
+
+  function cancelRepin() {
+    state.repinPinId = null;
+    dom.captureTitle.value = '';
+    render();
+    updateStatus('Re-pin cancelled.', 'idle');
+  }
+
+  async function refreshPin(pinId) {
+    var response = await sendMessage({
+      type: 'REFRESH_PIN',
+      id: pinId,
+    });
+
+    if (!response || !response.ok || !response.pin) {
+      throw new Error((response && response.error) || 'Refresh failed');
+    }
+
+    state.pins = state.pins.map(function (pin) {
+      return pin.id === pinId ? response.pin : pin;
+    });
+    render();
+  }
+
+  async function refreshAllPins() {
+    if (!state.pins.length) {
+      updateStatus('No pins to refresh.', 'idle');
+      return;
+    }
+
+    updateStatus('Refreshing saved pins...', 'idle');
+
+    var response = await sendMessage({
+      type: 'REFRESH_ALL_PINS',
+    });
+
+    if (!response || !response.ok) {
+      updateStatus((response && response.error) || 'Refresh all failed.', 'error');
+      return;
+    }
+
+    var results = response.results || [];
+    var resultById = {};
+    for (var i = 0; i < results.length; i += 1) {
+      resultById[results[i].id] = results[i];
+    }
+
+    state.pins = state.pins.map(function (item) {
+      var r = resultById[item.id];
+      if (!r) {
+        return item;
+      }
+      if (r.ok && r.pin) {
+        return r.pin;
+      }
+      return Object.assign({}, item, { syncError: r.error || 'Refresh failed' });
+    });
+
+    render();
+    var hasFailures = state.pins.some(function (pin) {
+      return Boolean(pin.syncError);
+    });
+    updateStatus(
+      hasFailures
+        ? 'Some pins could not be refreshed. Their saved snapshots are still preserved.'
+        : 'All pins refreshed successfully.',
+      hasFailures ? 'error' : 'success'
+    );
+  }
+
+  async function openSource(pinId) {
+    var pin = getPin(pinId);
+    if (!pin) {
+      return;
+    }
+
+    var response = await sendMessage({
+      type: 'OPEN_PIN_SOURCE',
+      url: pin.pageUrl,
+    });
+
+    if (!response || !response.ok) {
+      throw new Error((response && response.error) || 'Could not open the source page');
+    }
+
+    updateStatus('Opened the saved source page.', 'success');
+  }
+
+  async function startCapture() {
+    var titleHint = dom.captureTitle.value.trim();
+    var repinPin = state.repinPinId ? getPin(state.repinPinId) : null;
+
+    if (repinPin) {
+      var activeTabMatches =
+        state.activeTab &&
+        AIUsageStorage.isHttpUrl((state.activeTab && state.activeTab.url) || '') &&
+        isCompatibleTabUrl(repinPin.pageUrl, state.activeTab.url || '');
+      var repinPayload = {
+        type: 'PICKER_START',
+        title: titleHint || repinPin.title,
+        pinId: repinPin.id,
+      };
+
+      if (activeTabMatches) {
+        repinPayload.tabId = state.activeTab.id;
+      } else {
+        repinPayload.url = repinPin.pageUrl;
+      }
+
+      var repinResponse = await sendMessage(repinPayload);
+      if (!repinResponse || !repinResponse.ok) {
+        throw new Error((repinResponse && repinResponse.error) || 'Could not start re-pin');
+      }
+
+      updateStatus(
+        activeTabMatches
+          ? 'Picker opened on this tab. Save the replacement snapshot there.'
+          : 'Source page opened for re-pin. Save the replacement snapshot there.',
+        'success'
+      );
+      window.setTimeout(function () {
+        window.close();
+      }, 140);
+      return;
+    }
+
+    if (!state.activeTab || !AIUsageStorage.isHttpUrl(state.activeTab.url || '')) {
+      throw new Error('Open an http or https page before creating a pin');
+    }
+
+    var response = await sendMessage({
+      type: 'PICKER_START',
+      tabId: state.activeTab.id,
+      title: titleHint,
+    });
+
+    if (!response || !response.ok) {
+      throw new Error((response && response.error) || 'Could not start the picker');
+    }
+
+    updateStatus('Picker opened on this tab. Save your pin from the page.', 'success');
+    window.setTimeout(function () {
+      window.close();
+    }, 140);
+  }
+
+  async function handlePinListClick(event) {
     var actionButton = event.target.closest('[data-action]');
     if (!actionButton) {
       return;
     }
 
-    var card = actionButton.closest('.card');
+    var card = actionButton.closest('.pin-card');
     if (!card) {
       return;
     }
 
-    var entryId = card.dataset.entryId;
-    var entry = getStoredEntry(entryId);
-    var action = actionButton.dataset.action;
+    var pinId = card.getAttribute('data-pin-id');
+    var action = actionButton.getAttribute('data-action');
 
     if (action === 'drag') {
       return;
     }
 
     if (action === 'toggle-menu') {
-      clearFieldLabelEdit();
-      state.cardMenuEntryId = state.cardMenuEntryId === entryId ? null : entryId;
-      render();
+      togglePinMenu(pinId);
       return;
     }
 
-    if (action === 'open') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      chrome.tabs.create({ url: entry.pageUrl });
-      updateSyncStatus('Opened full page', 'success');
-      return;
-    }
-
-    if (action === 'reconfigure') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      setComposerMode(entry);
-      updateSyncStatus('Composer loaded for re-pin', 'idle');
-      return;
-    }
-
-    if (action === 'remove') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      var confirmed = window.confirm('Remove "' + entry.title + '"?');
-      if (!confirmed) {
-        return;
-      }
-
-      state.entries = AIUsageStorage.removeEntry(state.entries, entryId);
-      state.entries = await AIUsageStorage.saveEntries(state.entries);
-      if (state.editingTitleId === entryId) {
-        state.editingTitleId = null;
-      }
-      if (state.reconfigureEntryId === entryId) {
-        setComposerMode(null);
-      }
-      render();
-      updateSyncStatus('Entry removed', 'success');
-      return;
-    }
+    closePinMenu();
 
     if (action === 'edit-title') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      await toggleTitleEdit(entryId);
-    }
-  }
-
-  async function handleMenuClick(event) {
-    var actionButton = event.target.closest('[data-action]');
-    if (!actionButton) {
+      beginTitleEdit(pinId);
       return;
     }
 
-    var entryId = state.cardMenuEntryId;
-    if (!entryId) {
+    if (action === 'cancel-title') {
+      cancelTitleEdit();
       return;
     }
 
-    var entry = getStoredEntry(entryId);
-    if (!entry) {
-      closeCardMenu();
+    if (action === 'repin') {
+      beginRepin(pinId);
       return;
     }
 
-    var action = actionButton.dataset.action;
+    setBusy(true);
 
-    if (action === 'edit-title') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      await toggleTitleEdit(entryId);
-      return;
-    }
-
-    if (action === 'reconfigure') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      setComposerMode(entry);
-      updateSyncStatus('Composer loaded for re-pin', 'idle');
-      return;
-    }
-
-    if (action === 'open') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      chrome.tabs.create({ url: entry.pageUrl });
-      updateSyncStatus('Opened full page', 'success');
-      return;
-    }
-
-    if (action === 'remove') {
-      clearFieldLabelEdit();
-      closeCardMenu();
-      render();
-      var confirmed = window.confirm('Remove "' + entry.title + '"?');
-      if (!confirmed) {
+    try {
+      if (action === 'save-title') {
+        await saveTitle(pinId);
         return;
       }
 
-      state.entries = AIUsageStorage.removeEntry(state.entries, entryId);
-      state.entries = await AIUsageStorage.saveEntries(state.entries);
-      if (state.editingTitleId === entryId) {
-        state.editingTitleId = null;
-      }
-      if (state.reconfigureEntryId === entryId) {
-        setComposerMode(null);
-      }
-      render();
-      updateSyncStatus('Entry removed', 'success');
-    }
-  }
-
-  async function commitFieldLabelInput(entryId, fieldId, input) {
-    var nextLabel = AIUsageStorage.clampText(input.value, AIUsageStorage.MAX_FIELD_LABEL_LENGTH);
-    if (!nextLabel) {
-      updateSyncStatus('Field name cannot be empty', 'error');
-      input.focus();
-      return;
-    }
-
-    state.entries = state.entries.map(function (entry) {
-      if (entry.id !== entryId) {
-        return entry;
-      }
-
-      return Object.assign({}, entry, {
-        fields: entry.fields.map(function (field) {
-          if (field.id !== fieldId) {
-            return field;
-          }
-
-          return Object.assign({}, field, {
-            label: nextLabel,
-          });
-        }),
-      });
-    });
-
-    state.entries = await AIUsageStorage.saveEntries(state.entries);
-    clearFieldLabelEdit();
-    render();
-    updateSyncStatus('Field name saved', 'success');
-  }
-
-  async function handleCardInput(event) {
-    var target = event.target;
-    if (target.matches('[data-action="title-input"]')) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        await commitTitleInput(target.closest('.card').dataset.entryId, target);
+      if (action === 'refresh') {
+        await refreshPin(pinId);
+        updateStatus('Pin refreshed.', 'success');
         return;
       }
 
-      if (event.key === 'Escape') {
-        state.editingTitleId = null;
-        render();
-      }
-      return;
-    }
-
-    if (target.matches('[data-action="field-label-input"]')) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        await commitFieldLabelInput(
-          target.getAttribute('data-entry-id'),
-          target.getAttribute('data-field-id'),
-          target
-        );
+      if (action === 'open') {
+        await openSource(pinId);
         return;
       }
 
-      if (event.key === 'Escape') {
-        clearFieldLabelEdit();
-        render();
+      if (action === 'remove') {
+        await removePin(pinId);
       }
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function handleCardBlur(event) {
-    var target = event.target;
-    if (target.matches('[data-action="title-input"]')) {
-      var entryId = target.closest('.card').dataset.entryId;
-      if (state.editingTitleId !== entryId) {
-        return;
-      }
-
-      window.setTimeout(function () {
-        var activeElement = document.activeElement;
-        if (activeElement && target.closest('.card').contains(activeElement)) {
-          return;
-        }
-
-        commitTitleInput(entryId, target).catch(function (error) {
-          updateSyncStatus(error.message, 'error');
-        });
-      }, 0);
-      return;
-    }
-
-    if (target.matches('[data-action="field-label-input"]')) {
-      var fieldEntryId = target.getAttribute('data-entry-id');
-      var fieldId = target.getAttribute('data-field-id');
-      if (
-        !state.editingField ||
-        state.editingField.entryId !== fieldEntryId ||
-        state.editingField.fieldId !== fieldId
-      ) {
-        return;
-      }
-
-      window.setTimeout(function () {
-        var activeElement = document.activeElement;
-        if (activeElement && target.closest('.card').contains(activeElement)) {
-          return;
-        }
-
-        commitFieldLabelInput(fieldEntryId, fieldId, target).catch(function (error) {
-          updateSyncStatus(error.message, 'error');
-        });
-      }, 0);
-    }
-  }
-
-  function handleSeedClick(event) {
-    var chip = event.target.closest('[data-seed-url]');
-    if (!chip) {
-      return;
-    }
-
-    dom.entryUrl.value = chip.dataset.seedUrl;
-    dom.entryUrl.focus();
-    dom.entryUrl.select();
-    updateSyncStatus('Seed URL inserted', 'idle');
-  }
-
-  function bindEvents() {
-    dom.entryForm.addEventListener('submit', submitComposer);
-    dom.toggleComposer.addEventListener('click', function () {
-      clearFieldLabelEdit();
-      var nextVisible = !state.composerVisible;
-      setComposerVisible(nextVisible);
-      if (!nextVisible && state.reconfigureEntryId) {
-        setComposerMode(null);
-      }
-    });
-    dom.cardList.addEventListener('click', function (event) {
-      handleCardClick(event).catch(function (error) {
-        updateSyncStatus(error.message, 'error');
-      });
-    });
-    dom.cardList.addEventListener('keydown', function (event) {
-      handleCardInput(event).catch(function (error) {
-        updateSyncStatus(error.message, 'error');
-      });
-    });
-    dom.cardList.addEventListener('blur', function (event) {
-      handleCardBlur(event).catch(function (error) {
-        updateSyncStatus(error.message, 'error');
-      });
-    }, true);
-    dom.cardList.addEventListener('click', handleSeedClick);
-    dom.cardList.addEventListener('dblclick', function (event) {
-      var labelButton = event.target.closest('[data-action="edit-field-label"]');
-      if (!labelButton) {
-        return;
-      }
-
+  async function handlePinListKeydown(event) {
+    if (event.key === 'Escape' && state.openMenuPinId) {
       event.preventDefault();
-      event.stopPropagation();
-      setFieldLabelEdit(
-        labelButton.getAttribute('data-entry-id'),
-        labelButton.getAttribute('data-field-id')
-      );
-    });
-    dom.cardMenuLayer.addEventListener('click', function (event) {
-      handleMenuClick(event).catch(function (error) {
-        updateSyncStatus(error.message, 'error');
-      });
-    });
-    dom.reloadPages.addEventListener('click', function () {
-      if (dom.reloadPages.disabled) {
-        return;
-      }
+      closePinMenu();
+      return;
+    }
 
+    if (!event.target.classList.contains('pin-card__title-input')) {
+      return;
+    }
+
+    var card = event.target.closest('.pin-card');
+    if (!card) {
+      return;
+    }
+
+    var pinId = card.getAttribute('data-pin-id');
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
       setBusy(true);
-      reloadOpenPages()
-        .catch(function (error) {
-          updateSyncStatus(error.message, 'error');
-        })
-        .finally(function () {
-          setBusy(false);
-        });
-    });
-    dom.cardList.addEventListener('scroll', function () {
-      if (state.cardMenuEntryId !== null) {
-        closeCardMenu();
+      try {
+        await saveTitle(pinId);
+      } finally {
+        setBusy(false);
       }
-    }, { passive: true });
-    dom.refreshAll.addEventListener('click', function () {
-      if (dom.refreshAll.disabled) {
-        return;
-      }
+      return;
+    }
 
-      setBusy(true);
-      refreshAllEntries()
-        .catch(function (error) {
-          updateSyncStatus(error.message, 'error');
-        })
-        .finally(function () {
-          setBusy(false);
-        });
-    });
-    dom.composerCancel.addEventListener('click', function () {
-      setComposerMode(null);
-      updateSyncStatus('Reconfigure cancelled', 'idle');
-    });
-    document.addEventListener('click', function (event) {
-      if (event.target.closest('.card-menu-layer')) {
-        return;
-      }
-
-      if (!event.target.closest('.card') && state.cardMenuEntryId !== null) {
-        closeCardMenu();
-        render();
-      }
-    });
-    window.addEventListener('resize', function () {
-      if (state.cardMenuEntryId !== null) {
-        render();
-      }
-    });
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelTitleEdit();
+    }
   }
 
   function cacheDom() {
-    dom.entryForm = document.getElementById('entry-form');
-    dom.entryUrl = document.getElementById('entry-url');
-    dom.entryTitle = document.getElementById('entry-title');
-    dom.entrySubmit = document.getElementById('entry-submit');
-    dom.composerMode = document.getElementById('composer-mode');
-    dom.composerCancel = document.getElementById('composer-cancel');
-    dom.composerPanel = document.getElementById('composer-panel');
-    dom.toggleComposer = document.getElementById('toggle-composer');
-    dom.entryCount = document.getElementById('entry-count');
-    dom.syncStatus = document.getElementById('sync-status');
+    dom.captureHeading = document.getElementById('capture-heading');
+    dom.captureModeBadge = document.getElementById('capture-mode-badge');
+    dom.captureHelp = document.getElementById('capture-help');
+    dom.captureTitle = document.getElementById('capture-title');
+    dom.captureButton = document.getElementById('capture-button');
+    dom.captureCancel = document.getElementById('capture-cancel');
     dom.statusBanner = document.getElementById('status-banner');
-    dom.appShell = document.querySelector('.app-shell');
-    dom.cardList = document.getElementById('card-list');
-    dom.listSummary = document.getElementById('list-summary');
-    dom.reloadPages = document.getElementById('reload-pages');
+    dom.pinCount = document.getElementById('pin-count');
+    dom.currentTabHost = document.getElementById('current-tab-host');
+    dom.boardSummary = document.getElementById('board-summary');
+    dom.pinViewLayout = document.getElementById('pin-view-layout');
     dom.refreshAll = document.getElementById('refresh-all');
-    dom.cardMenuLayer = document.getElementById('card-menu-layer');
+    dom.pinList = document.getElementById('pin-list');
+  }
+
+  function bindEvents() {
+    dom.captureButton.addEventListener('click', function () {
+      setBusy(true);
+      startCapture()
+        .catch(function (error) {
+          updateStatus(error.message, 'error');
+        })
+        .finally(function () {
+          setBusy(false);
+        });
+    });
+
+    dom.captureCancel.addEventListener('click', function () {
+      cancelRepin();
+    });
+
+    dom.refreshAll.addEventListener('click', function () {
+      setBusy(true);
+      refreshAllPins()
+        .catch(function (error) {
+          updateStatus(error.message, 'error');
+        })
+        .finally(function () {
+          setBusy(false);
+        });
+    });
+
+    if (dom.pinViewLayout) {
+      dom.pinViewLayout.addEventListener('change', function () {
+        var next = normalizeViewLayout(dom.pinViewLayout.value);
+        state.viewLayout = next;
+        callbackToPromise(function (resolve) {
+          var payload = {};
+          payload[VIEW_LAYOUT_STORAGE_KEY] = next;
+          chrome.storage.local.set(payload, resolve);
+        })
+          .then(function () {
+            render();
+          })
+          .catch(function (error) {
+            updateStatus(error.message, 'error');
+          });
+      });
+    }
+
+    dom.pinList.addEventListener('click', function (event) {
+      handlePinListClick(event).catch(function (error) {
+        updateStatus(error.message, 'error');
+        setBusy(false);
+      });
+    });
+
+    dom.pinList.addEventListener('keydown', function (event) {
+      handlePinListKeydown(event).catch(function (error) {
+        updateStatus(error.message, 'error');
+        setBusy(false);
+      });
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!state.openMenuPinId) {
+        return;
+      }
+
+      if (event.target.closest('.pin-card__menu')) {
+        return;
+      }
+
+      closePinMenu();
+    });
   }
 
   async function init() {
     cacheDom();
     bindEvents();
-    setComposerVisible(false);
+    await loadState();
+    render();
 
-    try {
-      state.entries = await AIUsageStorage.loadEntries();
-      render();
-      if (dom.refreshAll) {
-        dom.refreshAll.disabled = !state.entries.length;
-      }
-      if (state.entries.length) {
-        await refreshAllEntries();
-      } else {
-        updateSyncStatus('Add a URL to begin', 'idle');
-      }
-    } catch (error) {
-      updateSyncStatus(error.message, 'error');
+    if (state.activeTab && AIUsageStorage.isHttpUrl((state.activeTab && state.activeTab.url) || '')) {
+      updateStatus('Ready to capture from ' + getHostname(state.activeTab.url) + '.', 'idle');
     }
   }
 
   document.addEventListener('DOMContentLoaded', function () {
     init().catch(function (error) {
-      updateSyncStatus(error.message, 'error');
+      updateStatus(error.message, 'error');
     });
   });
 })();
