@@ -11,6 +11,19 @@ itself a requirement. Delivery constraints agents apply in `plan.md` live in
 
 ## User Scenarios & Testing *(mandatory)*
 
+## Product Direction
+
+This rework is not limited to behavior and data model changes. The extension's presentation must also move away from
+the current AI-specific framing so the product reads as a general-purpose pinboard for arbitrary web information rather
+than a tool centered on AI dashboards, AI usage, or AI spending.
+
+The visual rework must preserve the existing browser-extension surface and simplicity, but it should update interface
+copy, information hierarchy, and visual language so the extension feels neutral, broadly useful, and appropriate for
+general browsing workflows.
+
+This visual repositioning is mandatory for the feature to be considered complete. It is not a polish-only follow-up,
+and it must be treated as part of the core product rework alongside capture, storage, and cross-tab access behavior.
+
 ### User Story 1 - Pin information from a page (Priority: P1)
 
 The user wants to capture useful information from the page they are currently viewing and save it as a reusable pin.
@@ -145,6 +158,14 @@ content or clearly explains why it cannot.
   and clearly explain that the pin needs manual recapture.
 - **FR-015**: The system MUST support multiple independent pins originating from the same page.
 - **FR-016**: The system MUST give clear feedback when pin creation, refresh, or source reopening cannot be completed.
+- **FR-017**: The extension UI MUST be visually reworked so it no longer presents itself as AI-specific and instead
+  communicates a general-purpose pinboard product for arbitrary web content.
+- **FR-018**: The extension UI copy, labels, and empty states MUST avoid AI-specific terminology unless the user is
+  pinning content that happens to come from an AI-related page.
+- **FR-019**: The extension surface MUST keep the existing lightweight popup-based interaction model while updating the
+  visual hierarchy and styling to support a more generalist product identity.
+- **FR-020**: The visual redesign MUST be implemented as part of this feature scope and MUST NOT be deferred to a later
+  cleanup, polish, or branding-only pass.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -162,6 +183,8 @@ content or clearly explains why it cannot.
   future feature says otherwise.
 - The browser extension remains the main access point for viewing and managing pins from any tab.
 - The feature is intended for general web content, not just AI dashboards or usage metrics.
+- The current AI-focused visual framing is considered part of the legacy implementation and should be replaced during
+  this rework.
 - The user handles access to authenticated pages themselves; the extension does not manage third-party credentials.
 
 ## Success Criteria *(mandatory)*
@@ -178,3 +201,5 @@ content or clearly explains why it cannot.
   reopening multiple source pages.
 - **SC-005**: When a source page can no longer be refreshed, 100% of tested failure cases preserve the last saved pin
   content and present an understandable next step to the user.
+- **SC-006**: In review of the implemented popup, no primary product copy, labels, or empty states still frame the
+  extension as an AI-only tracker rather than a general-purpose pinboard.
