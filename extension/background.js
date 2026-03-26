@@ -1,4 +1,4 @@
-importScripts('storage.js', 'sanitize.js');
+importScripts('storage.js');
 
 (function () {
   'use strict';
@@ -6,6 +6,10 @@ importScripts('storage.js', 'sanitize.js');
   var pendingPickerSessions = new Map();
   var PICKER_TAB_LOAD_TIMEOUT_MS = 25000;
   var REFRESH_TIMEOUT_MS = 25000;
+  var REFRESH_READ_RETRY_INTERVAL_MS = 400;
+  var REFRESH_READ_RETRY_MAX_MS = 20000;
+  /** Cap parallel tab lifecycles during refresh-all (one concurrent run per distinct URL group). */
+  var REFRESH_ALL_MAX_CONCURRENT_URL_GROUPS = 5;
 
   function callbackToPromise(setup) {
     return new Promise(function (resolve, reject) {
@@ -27,15 +31,21 @@ importScripts('storage.js', 'sanitize.js');
     });
   }
 
+  function tabsUpdate(tabId, updateProperties) {
+    return callbackToPromise(function (resolve) {
+      chrome.tabs.update(tabId, updateProperties, resolve);
+    });
+  }
+
   function tabsRemove(tabId) {
     return callbackToPromise(function (resolve) {
       chrome.tabs.remove(tabId, resolve);
     });
   }
 
-  function tabsReload(tabId) {
+  function tabsReload(tabId, reloadProperties) {
     return callbackToPromise(function (resolve) {
-      chrome.tabs.reload(tabId, {}, resolve);
+      chrome.tabs.reload(tabId, reloadProperties || {}, resolve);
     });
   }
 
@@ -85,63 +95,175 @@ importScripts('storage.js', 'sanitize.js');
     return pathname;
   }
 
-  function isCompatibleTabUrl(entryUrl, tabUrl) {
+  function isCompatibleTabUrl(pinUrl, tabUrl) {
     try {
-      var entry = new URL(entryUrl);
+      var pin = new URL(pinUrl);
       var tab = new URL(tabUrl);
 
-      if (entry.origin !== tab.origin) {
+      if (pin.origin !== tab.origin) {
         return false;
       }
 
-      var entryPath = normalizePath(entry.pathname);
+      var pinPath = normalizePath(pin.pathname);
       var tabPath = normalizePath(tab.pathname);
 
       return (
-        tabPath === entryPath ||
-        tabPath.indexOf(entryPath + '/') === 0 ||
-        entryPath.indexOf(tabPath + '/') === 0
+        tabPath === pinPath ||
+        tabPath.indexOf(pinPath + '/') === 0 ||
+        pinPath.indexOf(tabPath + '/') === 0
       );
     } catch (_error) {
       return false;
     }
   }
 
-  function waitForTabComplete(tabId, timeoutMs) {
+  /**
+   * Wait until the tab has finished loading a real http(s) document.
+   * Chrome may report status "complete" for about:blank before the requested URL loads;
+   * we only resolve when tabs.get shows status "complete" and a normal http(s) tab URL.
+   * When waitOptions.expectedPageUrl is set (refresh flow), also require no pendingUrl,
+   * a non-discarded tab, and URL compatibility with the pin's page URL.
+   */
+  function waitForTabComplete(tabId, timeoutMs, waitOptions) {
+    var expectedNorm = null;
+    if (
+      waitOptions &&
+      typeof waitOptions.expectedPageUrl === 'string' &&
+      waitOptions.expectedPageUrl.trim()
+    ) {
+      expectedNorm = AIUsageStorage.normalizeHttpUrl(waitOptions.expectedPageUrl);
+    }
+
     return new Promise(function (resolve, reject) {
+      var settled = false;
       var timeoutId = setTimeout(function () {
-        cleanup();
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        chrome.tabs.onUpdated.removeListener(listener);
         reject(new Error('Timed out while loading the page'));
       }, timeoutMs);
 
-      function cleanup() {
+      function finish() {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
         clearTimeout(timeoutId);
         chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+
+      function isTabReadyForWait(tab) {
+        if (!tab || tab.status !== 'complete') {
+          return false;
+        }
+
+        if (tab.discarded) {
+          return false;
+        }
+
+        var pending = tab.pendingUrl;
+        if (pending != null && String(pending).trim() !== '') {
+          return false;
+        }
+
+        var url = tab.url || '';
+        if (!AIUsageStorage.isHttpUrl(url)) {
+          return false;
+        }
+
+        if (expectedNorm && !isCompatibleTabUrl(expectedNorm, url)) {
+          return false;
+        }
+
+        return true;
+      }
+
+      function tryFinishIfReady() {
+        if (settled) {
+          return;
+        }
+
+        tabsGet(tabId)
+          .then(function (tab) {
+            if (!isTabReadyForWait(tab)) {
+              return;
+            }
+
+            finish();
+          })
+          .catch(function () {});
       }
 
       function listener(updatedTabId, changeInfo) {
-        if (updatedTabId === tabId && changeInfo.status === 'complete') {
-          cleanup();
-          resolve();
+        if (updatedTabId !== tabId || changeInfo.status !== 'complete') {
+          return;
         }
+
+        tryFinishIfReady();
       }
 
       chrome.tabs.onUpdated.addListener(listener);
-      tabsGet(tabId)
-        .then(function (tab) {
-          if (tab && tab.status === 'complete') {
-            cleanup();
-            resolve();
-          }
-        })
-        .catch(function () {});
+      tryFinishIfReady();
     });
   }
 
-  function readFieldFromPage(tabId, selectors) {
+  async function findMatchingTab(pageUrl) {
+    var tabs = await tabsQuery({});
+    return tabs
+      .filter(function (tab) {
+        return tab && tab.id !== undefined && typeof tab.url === 'string';
+      })
+      .sort(function (left, right) {
+        return Number(Boolean(right.active)) - Number(Boolean(left.active));
+      })
+      .find(function (tab) {
+        return isCompatibleTabUrl(pageUrl, tab.url);
+      });
+  }
+
+  async function getPickerTargetTab(message) {
+    if (Number.isInteger(message.tabId)) {
+      var existingTab = await tabsGet(message.tabId);
+      if (!existingTab || !AIUsageStorage.isHttpUrl(existingTab.url || '')) {
+        throw new Error('Pin capture works only on http or https pages');
+      }
+
+      await tabsUpdate(existingTab.id, { active: true });
+      return tabsGet(existingTab.id);
+    }
+
+    var pageUrl = AIUsageStorage.normalizeHttpUrl(message.url);
+    if (!pageUrl) {
+      throw new Error('Invalid source page');
+    }
+
+    var matchingTab = await findMatchingTab(pageUrl);
+    if (matchingTab && matchingTab.id !== undefined) {
+      await tabsUpdate(matchingTab.id, { active: true });
+      return tabsGet(matchingTab.id);
+    }
+
+    return tabsCreate({
+      url: pageUrl,
+      active: true,
+    });
+  }
+
+  async function readPinFromPage(tabId, pin) {
+    var selector = pin.selector;
+
+    if (!selector) {
+      throw new Error('Pin selector is missing');
+    }
+
     return executeScript({
       target: { tabId: tabId },
-      func: function (fieldSelectors) {
+      func: function (pinSelector) {
         function normalizeWhitespace(value) {
           return String(value || '')
             .replace(/\s+/g, ' ')
@@ -196,90 +318,120 @@ importScripts('storage.js', 'sanitize.js');
           return normalizeWhitespace(text);
         }
 
+        var node = document.querySelector(pinSelector);
+        if (!node) {
+          throw new Error('Saved source could not be matched on this page');
+        }
+
+        var valueText = readNodeValue(node);
+        if (!/[A-Za-z0-9]/.test(valueText)) {
+          throw new Error('Saved source no longer contains meaningful text');
+        }
+
         return {
           pageUrl: location.href,
-          title: readTitle(),
+          pageTitle: readTitle(),
           faviconUrl: readFaviconUrl(),
-          fields: fieldSelectors.map(function (field) {
-            var node = document.querySelector(field.selector);
-            if (!node) {
-              throw new Error('Selector not found: ' + field.selector);
-            }
-
-            return {
-              id: field.id,
-              label: field.label,
-              selector: field.selector,
-              valueText: readNodeValue(node),
-            };
-          }),
+          field: {
+            selector: pinSelector,
+            valueText: valueText,
+          },
         };
       },
-      args: [selectors],
+      args: [selector],
     }).then(function (results) {
       if (!results || !results.length || !results[0].result) {
-        throw new Error('No extraction result returned');
+        throw new Error('No refresh result returned');
       }
 
       return results[0].result;
     });
   }
 
-  async function findMatchingTab(pageUrl) {
-    var tabs = await tabsQuery({});
-    return tabs
-      .filter(function (tab) {
-        return tab && tab.id !== undefined && typeof tab.url === 'string';
-      })
-      .sort(function (left, right) {
-        return Number(Boolean(right.active)) - Number(Boolean(left.active));
-      })
-      .find(function (tab) {
-        return isCompatibleTabUrl(pageUrl, tab.url);
-      });
-  }
-
-  async function reloadEntryPage(entry) {
-    var tab = await findMatchingTab(entry.pageUrl);
-    if (!tab || tab.id === undefined) {
-      return {
-        id: entry.id,
-        ok: false,
-        skipped: true,
-        error: 'Page is not open',
-      };
+  function isRetriableRefreshReadError(message) {
+    if (!message || typeof message !== 'string') {
+      return false;
     }
 
-    await tabsReload(tab.id);
-    await waitForTabComplete(tab.id, REFRESH_TIMEOUT_MS);
-    return {
-      id: entry.id,
-      ok: true,
-    };
+    return (
+      message.indexOf('could not be matched') !== -1 ||
+      message.indexOf('meaningful text') !== -1 ||
+      message.indexOf('No refresh result') !== -1
+    );
   }
 
-  async function captureEntrySnapshot(entry) {
-    var existingTab = await findMatchingTab(entry.pageUrl);
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function readPinFromPageWithRetries(tabId, pin) {
+    var deadline = Date.now() + REFRESH_READ_RETRY_MAX_MS;
+    var lastError = null;
+
+    while (Date.now() < deadline) {
+      try {
+        return await readPinFromPage(tabId, pin);
+      } catch (error) {
+        lastError = error;
+        var msg = formatError(error);
+        if (!isRetriableRefreshReadError(msg)) {
+          throw error;
+        }
+
+        await delay(REFRESH_READ_RETRY_INTERVAL_MS);
+      }
+    }
+
+    throw lastError || new Error('Refresh timed out while waiting for page content');
+  }
+
+  /**
+   * Find or create a tab for the pin URL, reload with cache bypass, wait until ready.
+   * @returns {{ tabId: number, createdTabId: number | null }}
+   */
+  async function ensureRefreshedTabForUrl(pageUrlNorm, pageUrlForTab) {
+    var waitOpts = { expectedPageUrl: pageUrlNorm };
+    var existingTab = await findMatchingTab(pageUrlForTab);
     var tab = existingTab;
     var createdTabId = null;
 
-    try {
-      if (!tab) {
-        tab = await tabsCreate({
-          url: entry.pageUrl,
-          active: false,
-        });
-        createdTabId = tab.id;
-        await waitForTabComplete(tab.id, REFRESH_TIMEOUT_MS);
+    if (!tab) {
+      tab = await tabsCreate({
+        url: pageUrlForTab,
+        active: false,
+      });
+      createdTabId = tab.id;
+      try {
+        await waitForTabComplete(tab.id, REFRESH_TIMEOUT_MS, waitOpts);
+        await tabsReload(tab.id, { bypassCache: true });
+        await waitForTabComplete(tab.id, REFRESH_TIMEOUT_MS, waitOpts);
+      } catch (error) {
+        try {
+          await tabsRemove(createdTabId);
+        } catch (_removeError) {}
+        throw error;
       }
+      return { tabId: tab.id, createdTabId: createdTabId };
+    }
 
-      var extracted = await readFieldFromPage(tab.id, entry.fields);
-      return {
-        pageUrl: extracted.pageUrl || entry.pageUrl,
-        title: extracted.title || entry.title,
-        faviconUrl: extracted.faviconUrl || entry.faviconUrl,
-        fields: extracted.fields || entry.fields,
-      };
+    await tabsReload(tab.id, { bypassCache: true });
+    await waitForTabComplete(tab.id, REFRESH_TIMEOUT_MS, waitOpts);
+    return { tabId: tab.id, createdTabId: null };
+  }
+
+  async function capturePinSnapshot(pin) {
+    var pageUrlNorm = AIUsageStorage.normalizeHttpUrl(pin.pageUrl);
+    if (!pageUrlNorm) {
+      throw new Error('Stored source URL is invalid');
+    }
+
+    var createdTabId = null;
+    try {
+      var ensured = await ensureRefreshedTabForUrl(pageUrlNorm, pin.pageUrl);
+      createdTabId = ensured.createdTabId;
+      return await readPinFromPageWithRetries(ensured.tabId, pin);
     } finally {
       if (createdTabId !== null) {
         try {
@@ -289,71 +441,80 @@ importScripts('storage.js', 'sanitize.js');
     }
   }
 
-  async function savePickerResult(session, result) {
-    var entries = await AIUsageStorage.loadEntries();
-    var now = new Date().toISOString();
-    var entryId = session.entryId || AIUsageStorage.generateId();
-    var existingIndex = entries.findIndex(function (entry) {
-      return entry.id === entryId;
-    });
-    var existingEntry = existingIndex >= 0 ? entries[existingIndex] : null;
-    var titleFromSession = AIUsageStorage.clampText(session.customTitle || '', AIUsageStorage.MAX_TITLE_LENGTH);
-    var normalizedFields = AIUsageStorage.normalizeFields(result.fields);
+  /**
+   * Refresh every pin that shares the same normalized URL using one tab load.
+   * @returns {Array<{ id: string, ok: boolean, pin?: object, error?: string }>}
+   */
+  async function refreshPinsSharingUrl(pageUrlNorm, groupPins) {
+    var results = [];
+    var createdTabId = null;
 
-    if (!normalizedFields.length) {
-      throw new Error('No fields selected');
+    try {
+      var ensured = await ensureRefreshedTabForUrl(pageUrlNorm, groupPins[0].pageUrl);
+      createdTabId = ensured.createdTabId;
+      var tabId = ensured.tabId;
+
+      for (var i = 0; i < groupPins.length; i += 1) {
+        var pin = groupPins[i];
+        try {
+          var snapshot = await readPinFromPageWithRetries(tabId, pin);
+          var updatedPin = AIUsageStorage.buildPinFromCapture({
+            existingPin: pin,
+            capture: snapshot,
+            titleHint: pin.title,
+            order: pin.order,
+          });
+
+          if (!updatedPin) {
+            throw new Error('Saved source could not be refreshed');
+          }
+
+          results.push({
+            id: pin.id,
+            ok: true,
+            pin: updatedPin,
+          });
+        } catch (error) {
+          results.push({
+            id: pin.id,
+            ok: false,
+            error: formatError(error),
+          });
+        }
+      }
+    } catch (error) {
+      var msg = formatError(error);
+      for (var j = 0; j < groupPins.length; j += 1) {
+        results.push({
+          id: groupPins[j].id,
+          ok: false,
+          error: msg,
+        });
+      }
+    } finally {
+      if (createdTabId !== null) {
+        try {
+          await tabsRemove(createdTabId);
+        } catch (_error) {}
+      }
     }
 
-    var updatedEntry = {
-      id: entryId,
-      pageUrl: result.pageUrl,
-      title: existingEntry ? existingEntry.title : titleFromSession || result.title || AIUsageStorage.deriveTitleFromUrl(result.pageUrl),
-      faviconUrl: result.faviconUrl || AIUsageStorage.defaultFaviconUrl(result.pageUrl),
-      order: existingEntry ? existingEntry.order : entries.length,
-      fields: normalizedFields,
-      updatedAt: now,
-    };
-
-    if (existingIndex >= 0) {
-      entries[existingIndex] = Object.assign({}, existingEntry, {
-        pageUrl: updatedEntry.pageUrl,
-        title: titleFromSession || existingEntry.title,
-        faviconUrl: updatedEntry.faviconUrl,
-        fields: updatedEntry.fields,
-        updatedAt: updatedEntry.updatedAt,
-      });
-    } else {
-      entries.push(updatedEntry);
-    }
-
-    var savedEntries = await AIUsageStorage.saveEntries(entries);
-    return (
-      savedEntries.find(function (entry) {
-        return entry.id === entryId;
-      }) || updatedEntry
-    );
+    return results;
   }
 
   async function handlePickerStart(message, sendResponse) {
-    var pageUrl = AIUsageStorage.normalizeHttpUrl(message.url);
-    if (!pageUrl) {
-      sendResponse({ ok: false, error: 'Invalid URL' });
-      return;
-    }
-
-    var tab = null;
     try {
-      tab = await tabsCreate({
-        url: pageUrl,
-        active: false,
-      });
+      var tab = await getPickerTargetTab(message);
+      if (!tab || tab.id === undefined) {
+        throw new Error('Could not open the source page');
+      }
 
       pendingPickerSessions.set(tab.id, {
-        sendResponse: sendResponse,
-        entryId: typeof message.entryId === 'string' && message.entryId.trim() ? message.entryId.trim() : null,
-        customTitle: typeof message.title === 'string' ? message.title : '',
-        pageUrl: pageUrl,
-        tabId: tab.id,
+        pinId:
+          typeof message.pinId === 'string' && message.pinId.trim()
+            ? message.pinId.trim()
+            : null,
+        titleHint: typeof message.title === 'string' ? message.title : '',
       });
 
       await waitForTabComplete(tab.id, PICKER_TAB_LOAD_TIMEOUT_MS);
@@ -361,118 +522,164 @@ importScripts('storage.js', 'sanitize.js');
         target: { tabId: tab.id },
         files: ['content/picker.js'],
       });
+
+      sendResponse({
+        ok: true,
+        started: true,
+        tabId: tab.id,
+      });
     } catch (error) {
-      if (tab && tab.id !== undefined) {
-        pendingPickerSessions.delete(tab.id);
-        try {
-          await tabsRemove(tab.id);
-        } catch (_closeError) {}
-      }
-      sendResponse({ ok: false, error: formatError(error) });
+      sendResponse({
+        ok: false,
+        error: formatError(error),
+      });
     }
   }
 
-  async function handlePickerResponse(message, sender) {
+  async function handlePickerSavePin(message, sender, sendResponse) {
     var tabId = sender && sender.tab ? sender.tab.id : null;
     if (tabId === null || !pendingPickerSessions.has(tabId)) {
+      sendResponse({ ok: false, error: 'No active pin session' });
       return;
     }
 
-    var session = pendingPickerSessions.get(tabId);
-    pendingPickerSessions.delete(tabId);
-
     try {
-      if (message && message.ok === false) {
-        try {
-          await tabsRemove(tabId);
-        } catch (_error) {}
+      var session = pendingPickerSessions.get(tabId);
+      var pins = await AIUsageStorage.loadPins();
+      var existingPin = session.pinId
+        ? pins.find(function (pin) {
+            return pin.id === session.pinId;
+          })
+        : null;
+      var pin = AIUsageStorage.buildPinFromCapture({
+        existingPin: existingPin,
+        capture: {
+          pageUrl: message.pageUrl,
+          pageTitle: message.pageTitle,
+          faviconUrl: message.faviconUrl,
+          field: message.field || {},
+        },
+        titleHint: session.titleHint,
+        order: existingPin ? existingPin.order : pins.length,
+      });
 
-        session.sendResponse({ ok: false, error: message.error || 'Selection cancelled' });
-        return;
+      if (!pin) {
+        throw new Error('Choose visible text that can be saved as a pin');
       }
 
-      var entry = await savePickerResult(session, {
-        pageUrl: message.pageUrl || session.pageUrl,
-        title: message.title || '',
-        faviconUrl: message.faviconUrl || '',
-        fields: message.fields || [],
+      var nextPins = existingPin
+        ? pins.map(function (item) {
+            return item.id === existingPin.id ? pin : item;
+          })
+        : pins.concat(pin);
+      var savedPins = await AIUsageStorage.savePins(nextPins);
+      var savedPin = savedPins.find(function (item) {
+        return item.id === pin.id;
       });
 
-      try {
-        await tabsRemove(tabId);
-      } catch (_error) {}
+      if (existingPin) {
+        pendingPickerSessions.delete(tabId);
+      }
 
-      session.sendResponse({
+      sendResponse({
         ok: true,
-        entry: entry,
+        pin: savedPin || pin,
+        sessionComplete: Boolean(existingPin),
       });
     } catch (error) {
-      session.sendResponse({ ok: false, error: formatError(error) });
+      sendResponse({
+        ok: false,
+        error: formatError(error),
+      });
     }
   }
 
-  async function handleEntriesGet(sendResponse) {
+  function handlePickerSessionEnd(sender, sendResponse) {
+    var tabId = sender && sender.tab ? sender.tab.id : null;
+    if (tabId !== null) {
+      pendingPickerSessions.delete(tabId);
+    }
+
+    sendResponse({ ok: true });
+  }
+
+  function handlePickerCancel(message, sender, sendResponse) {
+    var tabId = sender && sender.tab ? sender.tab.id : null;
+    if (tabId !== null) {
+      pendingPickerSessions.delete(tabId);
+    }
+
+    sendResponse({
+      ok: false,
+      error: message && message.error ? message.error : 'Pin capture cancelled',
+    });
+  }
+
+  async function handlePinsGet(sendResponse) {
     try {
-      var entries = await AIUsageStorage.loadEntries();
-      sendResponse({ ok: true, entries: entries });
+      var pins = await AIUsageStorage.loadPins();
+      sendResponse({ ok: true, pins: pins });
     } catch (error) {
       sendResponse({ ok: false, error: formatError(error) });
     }
   }
 
-  async function handleEntriesSave(message, sendResponse) {
+  async function handlePinsSave(message, sendResponse) {
     try {
-      var savedEntries = await AIUsageStorage.saveEntries(message.entries || []);
-      sendResponse({ ok: true, entries: savedEntries });
+      var savedPins = await AIUsageStorage.savePins(message.pins || []);
+      sendResponse({ ok: true, pins: savedPins });
     } catch (error) {
       sendResponse({ ok: false, error: formatError(error) });
     }
   }
 
-  async function handleRefreshEntry(message, sendResponse) {
+  async function handleRefreshPin(message, sendResponse) {
     try {
-      var entries = await AIUsageStorage.loadEntries();
-      var entry = entries.find(function (item) {
+      var pins = await AIUsageStorage.loadPins();
+      var pin = pins.find(function (item) {
         return item.id === message.id;
       });
 
-      if (!entry) {
+      if (!pin) {
         sendResponse({
-          type: 'REFRESH_ENTRY_RESULT',
+          type: 'REFRESH_PIN_RESULT',
           id: message.id,
           ok: false,
-          error: 'Entry not found',
+          error: 'Pin not found',
         });
         return;
       }
 
-      var snapshot = await captureEntrySnapshot(entry);
-      var updatedAt = new Date().toISOString();
-      var nextEntries = entries.map(function (item) {
-        if (item.id !== entry.id) {
-          return item;
-        }
-
-        return Object.assign({}, item, {
-          pageUrl: snapshot.pageUrl || item.pageUrl,
-          faviconUrl: snapshot.faviconUrl || item.faviconUrl,
-          fields: snapshot.fields || item.fields,
-          updatedAt: updatedAt,
-        });
+      var snapshot = await capturePinSnapshot(pin);
+      var updatedPin = AIUsageStorage.buildPinFromCapture({
+        existingPin: pin,
+        capture: snapshot,
+        titleHint: pin.title,
+        order: pin.order,
       });
 
-      await AIUsageStorage.saveEntries(nextEntries);
+      if (!updatedPin) {
+        throw new Error('Saved source could not be refreshed');
+      }
+
+      var savedPins = await AIUsageStorage.savePins(
+        pins.map(function (item) {
+          return item.id === pin.id ? updatedPin : item;
+        })
+      );
+      var savedPin = savedPins.find(function (item) {
+        return item.id === updatedPin.id;
+      });
 
       sendResponse({
-        type: 'REFRESH_ENTRY_RESULT',
-        id: entry.id,
+        type: 'REFRESH_PIN_RESULT',
+        id: pin.id,
         ok: true,
-        fields: snapshot.fields,
-        updatedAt: updatedAt,
+        pin: savedPin || updatedPin,
       });
     } catch (error) {
       sendResponse({
-        type: 'REFRESH_ENTRY_RESULT',
+        type: 'REFRESH_PIN_RESULT',
         id: message.id,
         ok: false,
         error: formatError(error),
@@ -480,15 +687,145 @@ importScripts('storage.js', 'sanitize.js');
     }
   }
 
+  async function handleRefreshAllPins(sendResponse) {
+    try {
+      var pins = await AIUsageStorage.loadPins();
+      if (!pins.length) {
+        sendResponse({ ok: true, results: [] });
+        return;
+      }
+
+      var invalidResults = [];
+      var groups = new Map();
+
+      for (var i = 0; i < pins.length; i += 1) {
+        var pin = pins[i];
+        var norm = AIUsageStorage.normalizeHttpUrl(pin.pageUrl);
+        if (!norm) {
+          invalidResults.push({
+            id: pin.id,
+            ok: false,
+            error: 'Stored source URL is invalid',
+          });
+          continue;
+        }
+
+        if (!groups.has(norm)) {
+          groups.set(norm, []);
+        }
+        groups.get(norm).push(pin);
+      }
+
+      var groupEntries = [];
+      groups.forEach(function (groupPins, norm) {
+        groupEntries.push([norm, groupPins]);
+      });
+
+      var groupResultArrays = [];
+      for (
+        var chunkStart = 0;
+        chunkStart < groupEntries.length;
+        chunkStart += REFRESH_ALL_MAX_CONCURRENT_URL_GROUPS
+      ) {
+        var chunk = groupEntries.slice(
+          chunkStart,
+          chunkStart + REFRESH_ALL_MAX_CONCURRENT_URL_GROUPS
+        );
+        var chunkResults = await Promise.all(
+          chunk.map(function (entry) {
+            return refreshPinsSharingUrl(entry[0], entry[1]);
+          })
+        );
+        groupResultArrays = groupResultArrays.concat(chunkResults);
+      }
+      var flat = invalidResults.slice();
+      for (var g = 0; g < groupResultArrays.length; g += 1) {
+        flat = flat.concat(groupResultArrays[g]);
+      }
+
+      var successById = {};
+      for (var r = 0; r < flat.length; r += 1) {
+        var entry = flat[r];
+        if (entry.ok && entry.pin) {
+          successById[entry.id] = entry.pin;
+        }
+      }
+
+      var nextPins = pins.map(function (p) {
+        if (successById[p.id]) {
+          return successById[p.id];
+        }
+        return p;
+      });
+
+      await AIUsageStorage.savePins(nextPins);
+
+      var savedPins = await AIUsageStorage.loadPins();
+      var savedById = {};
+      for (var s = 0; s < savedPins.length; s += 1) {
+        savedById[savedPins[s].id] = savedPins[s];
+      }
+
+      var results = flat.map(function (item) {
+        if (item.ok && item.pin) {
+          return {
+            id: item.id,
+            ok: true,
+            pin: savedById[item.id] || item.pin,
+          };
+        }
+        return {
+          id: item.id,
+          ok: false,
+          error: item.error,
+        };
+      });
+
+      sendResponse({
+        ok: true,
+        results: results,
+      });
+    } catch (error) {
+      sendResponse({
+        ok: false,
+        error: formatError(error),
+      });
+    }
+  }
+
+  async function handleOpenPinSource(message, sendResponse) {
+    try {
+      var pageUrl = AIUsageStorage.normalizeHttpUrl(message.url);
+      if (!pageUrl) {
+        throw new Error('Stored source URL is invalid');
+      }
+
+      await tabsCreate({
+        url: pageUrl,
+        active: true,
+      });
+
+      sendResponse({ ok: true });
+    } catch (error) {
+      sendResponse({ ok: false, error: formatError(error) });
+    }
+  }
+
   async function handleReloadOpenPages(sendResponse) {
-    sendResponse({
-      ok: true,
-    });
+    sendResponse({ ok: true });
 
     try {
-      var entries = await AIUsageStorage.loadEntries();
-      for (var index = 0; index < entries.length; index += 1) {
-        await reloadEntryPage(entries[index]);
+      var pins = await AIUsageStorage.loadPins();
+      var seenTabIds = new Set();
+
+      for (var index = 0; index < pins.length; index += 1) {
+        var tab = await findMatchingTab(pins[index].pageUrl);
+        if (!tab || tab.id === undefined || seenTabIds.has(tab.id)) {
+          continue;
+        }
+
+        seenTabIds.add(tab.id);
+        await tabsReload(tab.id);
       }
     } catch (_error) {}
   }
@@ -503,28 +840,43 @@ importScripts('storage.js', 'sanitize.js');
       return true;
     }
 
-    if (message.type === 'PICKER_RESULT') {
-      handlePickerResponse(message, sender);
+    if (message.type === 'PICKER_SAVE_PIN') {
+      handlePickerSavePin(message, sender, sendResponse);
+      return true;
+    }
+
+    if (message.type === 'PICKER_SESSION_END') {
+      handlePickerSessionEnd(sender, sendResponse);
       return true;
     }
 
     if (message.type === 'PICKER_CANCEL') {
-      handlePickerResponse({ ok: false, error: 'Selection cancelled' }, sender);
+      handlePickerCancel(message, sender, sendResponse);
       return true;
     }
 
-    if (message.type === 'ENTRIES_GET') {
-      handleEntriesGet(sendResponse);
+    if (message.type === 'PINS_GET') {
+      handlePinsGet(sendResponse);
       return true;
     }
 
-    if (message.type === 'ENTRIES_SAVE') {
-      handleEntriesSave(message, sendResponse);
+    if (message.type === 'PINS_SAVE') {
+      handlePinsSave(message, sendResponse);
       return true;
     }
 
-    if (message.type === 'REFRESH_ENTRY') {
-      handleRefreshEntry(message, sendResponse);
+    if (message.type === 'REFRESH_PIN') {
+      handleRefreshPin(message, sendResponse);
+      return true;
+    }
+
+    if (message.type === 'REFRESH_ALL_PINS') {
+      handleRefreshAllPins(sendResponse);
+      return true;
+    }
+
+    if (message.type === 'OPEN_PIN_SOURCE') {
+      handleOpenPinSource(message, sendResponse);
       return true;
     }
 

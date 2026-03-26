@@ -3,106 +3,111 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Usage Ledger</title>
+    <title>Commonplace</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <div class="app-shell">
-      <section class="list-region" aria-label="Tracked sections">
-        <div class="list-region__head">
-          <div>
-            <div class="list-region__eyebrow">Live list</div>
-            <h2 class="list-region__title">Tracked sections</h2>
-          </div>
-          <div class="list-region__tools">
-            <div id="list-summary" class="list-region__summary">Sorted by your manual order</div>
-            <div class="list-region__actions">
-              <button id="reload-pages" class="ghost-button list-region__refresh" type="button">
-                ↺ Reload pages
-              </button>
-              <button id="refresh-all" class="ghost-button list-region__refresh" type="button">
-                ↻ Refresh all
-              </button>
-            </div>
-          </div>
-        </div>
-        <div id="status-banner" class="status-banner" role="status" aria-live="polite"></div>
-        <div id="card-list" class="card-list" role="list"></div>
-      </section>
-
-      <section id="composer-panel" class="composer composer--collapsed" aria-label="Add or reconfigure an entry">
-        <form id="entry-form" class="composer__form" autocomplete="off">
-          <div class="composer__grid">
-            <label class="field field--url">
-              <span class="field__label">Page URL</span>
-              <input
-                id="entry-url"
-                class="input"
-                type="url"
-                inputmode="url"
-                placeholder="https://example.com/dashboard"
-                maxlength="2048"
-                required
-              />
-            </label>
-
-            <label class="field field--title">
-              <span class="field__label">Custom title</span>
-              <input
-                id="entry-title"
-                class="input"
-                type="text"
-                placeholder="Optional label for the card"
-                maxlength="200"
-              />
-            </label>
-
-            <button id="entry-submit" class="primary-button" type="submit">
-              <span class="primary-button__plus">+</span>
-              <span class="primary-button__label">Start picking</span>
-            </button>
-          </div>
-
-          <div class="composer__meta">
-            <p id="composer-help" class="composer__help">
-              Any <code>http</code> or <code>https</code> page works. Click specific values on the
-              page, name each one, and finish when you have the fields you want.
-            </p>
-            <div class="composer__mode">
-              <span id="composer-mode" class="mode-chip">New entry</span>
-              <button id="composer-cancel" class="ghost-button" type="button" hidden>
-                Cancel reconfigure
-              </button>
-            </div>
-          </div>
-        </form>
-      </section>
-
-      <header class="hero" aria-label="AI Usage Ledger">
+      <header class="hero" aria-label="Commonplace pinboard">
         <div class="hero__copy">
-          <div class="hero__eyebrow">Personal AI atlas</div>
-          <h1 class="hero__title">AI Usage Ledger</h1>
+          <div class="hero__eyebrow">Field Notes Archive</div>
+          <h1 class="hero__title">Commonplace</h1>
           <p class="hero__subtitle">
-            Pin the sections you care about, keep them in one ordered view, and reopen the
-            popup whenever you need a live snapshot.
+            Save a snapshot from the page in front of you, then reopen it from
+            any other tab without chasing the source again.
           </p>
         </div>
         <div class="hero__stats">
-          <div id="entry-count" class="hero__stat-value">0</div>
-          <div class="hero__stat-label">tracked panels</div>
-          <div id="sync-status" class="hero__stat-state">Ready</div>
-          <button
-            id="toggle-composer"
-            class="ghost-button hero__toggle"
-            type="button"
-            aria-pressed="false"
-          >
-            Add link
-          </button>
+          <div class="hero__stat">
+            <div id="pin-count" class="hero__stat-value">0</div>
+            <div class="hero__stat-label">saved pins</div>
+          </div>
+          <div class="hero__stat">
+            <div
+              id="current-tab-host"
+              class="hero__stat-value hero__stat-value--small"
+            >
+              No tab
+            </div>
+            <div class="hero__stat-label">current page</div>
+          </div>
         </div>
       </header>
+
+      <section class="board" aria-label="Saved pins">
+        <div class="board__head">
+          <div>
+            <div class="section-eyebrow">Saved board</div>
+            <h2 class="board__title">Pinned snapshots</h2>
+          </div>
+          <div class="board__tools">
+            <div id="board-summary" class="board__summary">
+              Pins stay readable from any tab.
+            </div>
+            <div class="board-view-field">
+              <label for="pin-view-layout" class="board-view-field__label"
+                >Layout</label
+              >
+              <select id="pin-view-layout" class="board-view-select">
+                <option value="grouped">Grouped by site</option>
+                <option value="flat">Flat list</option>
+              </select>
+            </div>
+            <button id="refresh-all" class="ghost-button" type="button">
+              Refresh all
+            </button>
+          </div>
+        </div>
+
+        <div id="pin-list" class="pin-list"></div>
+      </section>
+
+      <section class="capture-panel" aria-label="Capture a new pin">
+        <div class="capture-panel__head">
+          <div>
+            <div class="section-eyebrow">Capture</div>
+            <h2 id="capture-heading" class="capture-panel__title">
+              Pin From This Tab
+            </h2>
+          </div>
+          <div id="capture-mode-badge" class="mode-badge">Current page</div>
+        </div>
+
+        <p id="capture-help" class="capture-panel__help">
+          Open the picker on this tab, click the content you want, name it if
+          needed, and save each snapshot directly into the board.
+        </p>
+
+        <label class="field" for="capture-title">
+          <span class="field__label">Optional title override</span>
+          <input
+            id="capture-title"
+            class="input"
+            type="text"
+            placeholder="Use the page title or keep your own label"
+            maxlength="200"
+          />
+        </label>
+
+        <div class="capture-panel__actions">
+          <button id="capture-button" class="primary-button" type="button">
+            Pin From This Tab
+          </button>
+          <button id="capture-cancel" class="ghost-button" type="button" hidden>
+            Cancel re-pin
+          </button>
+        </div>
+
+        <div
+          id="status-banner"
+          class="status-banner"
+          role="status"
+          aria-live="polite"
+        >
+          Ready to capture from the current page.
+        </div>
+      </section>
     </div>
-    <div id="card-menu-layer" class="card-menu-layer" aria-hidden="true"></div>
 
     <script src="storage.js"></script>
     <script src="sanitize.js"></script>
