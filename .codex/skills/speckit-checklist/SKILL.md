@@ -1,6 +1,11 @@
 ---
-description: Generate a custom checklist for the current feature based on user requirements.
+name: speckit-checklist
+description: Generate custom quality checklists for validating requirements completeness
+  and clarity. Use to create unit tests for English that ensure spec quality before
+  implementation.
 ---
+
+# Speckit Checklist Skill
 
 ## Checklist Purpose: "Unit Tests for English"
 
